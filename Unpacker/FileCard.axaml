@@ -1,18 +1,37 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Name="Root"
-             x:Class="Unpacker.FileCard"> <Border Padding="20" CornerRadius="8" Background="#1A1A1A">
-        <Grid ColumnDefinitions="Auto, *">
-            
-            <Border Grid.Column="0" Width="50" Height="50" Background="#333" CornerRadius="4">
-                <PathIcon Data="M 0,0 L 10,0 L 10,10 L 0,10 Z" Foreground="#11ad32" />
+             x:Class="Unpacker.FileCard">
+
+    <Border Padding="20" CornerRadius="8" Background="#1A1A1A">
+        <Grid ColumnDefinitions="Auto,*">
+
+            <Border Grid.Column="0"
+                    Width="50"
+                    Height="50"
+                    Background="#333"
+                    CornerRadius="4"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+
+                <Image Source="avares://Unpacker/Assets/icone-de-dossier-symbole-png-verte.png"
+                       Width="24"
+                       Height="24"
+                       Stretch="Uniform"/>
             </Border>
 
-            <StackPanel Grid.Column="1" Margin="15,0,0,0" VerticalAlignment="Center">
-                <TextBlock Text="{Binding #Root.Name}" FontWeight="Bold" FontSize="16"/>
-                <TextBlock Text="~/Downloads/..." Foreground="#888"/>
+            <StackPanel Grid.Column="1"
+                        Margin="15,0,0,0"
+                        VerticalAlignment="Center">
+
+                <TextBlock Text="{Binding Name, ElementName=Root}"
+                           FontWeight="Bold"
+                           FontSize="16"/>
+
+                <TextBlock Text="~/Downloads/..."
+                           Foreground="#888"/>
             </StackPanel>
-            
+
         </Grid>
     </Border>
 </UserControl>

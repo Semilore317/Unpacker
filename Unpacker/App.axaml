@@ -1,14 +1,54 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Unpacker.App"
-             xmlns:local="using:Unpacker"
-             RequestedThemeVariant="Dark">
-
-    <Application.DataTemplates>
-        <local:ViewLocator/>
-    </Application.DataTemplates>
-  
-    <Application.Styles>
+             RequestedThemeVariant="Dark"> <Application.Styles>
         <FluentTheme />
+        
+        <Style Selector="Window">
+            <Setter Property="Background" Value="#121212" /> <Setter Property="FontFamily" Value="Inter, Segoe UI, Sans-Serif" />
+            <Setter Property="Foreground" Value="#E0E0E0" />
+        </Style>
+
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#10B981" /> <Setter Property="Foreground" Value="#000000" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="20,10" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.2" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#059669" /> <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="#1E1E1E" />
+            <Setter Property="BorderBrush" Value="#333333" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="#10B981" /> <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#1E1E1E" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="BorderBrush" Value="#333333" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BoxShadow" Value="0 4 12 0 #55000000" /> </Style>
+
+        <Style Selector="Button.icon">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="#333" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
     </Application.Styles>
 </Application>

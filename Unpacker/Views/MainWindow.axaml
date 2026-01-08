@@ -8,13 +8,16 @@
         x:Class="Unpacker.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Unpacker">
+        Title="Unpacker"
+        Background="#121212">
 
-    <StackPanel Margin="20">
+    <StackPanel Margin="40" Spacing="20" MaxWidth="600" MaxHeight="400">
         <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" Margin="0,0,0,20"/>
         
+        <!--
         <root:FileCard Title="Obsidian-1.0.tar.gz" />
-        
+        -->
+        <root:AppInfoCard/>
     </StackPanel>
 
 </Window>

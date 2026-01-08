@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="150"
+             x:Class="Unpacker.AppInfoCard"
+             x:Name="Root">
+
+    <Border Classes="card" Padding="20">
+        <Grid ColumnDefinitions="Auto, *" ColumnSpacing="20">
+            
+            <Border Grid.Column="0" 
+                    Width="64" Height="64" 
+                    CornerRadius="12" 
+                    Background="#252525"
+                    VerticalAlignment="Top">
+                
+                <Image Source="avares://Unpacker/Assets/icone-de-dossier-symbole-png-verte.png"
+                       Width="32" Height="32"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+
+            <StackPanel Grid.Column="1" Spacing="12">
+                
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Application Name" FontSize="12" Foreground="#888"/>
+                    <TextBox Text="{Binding #Root.AppName}" 
+                             Watermark="e.g. Obsidian" />
+                </StackPanel>
+
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Version" FontSize="12" Foreground="#888"/>
+                    <TextBox Text="{Binding #Root.AppVersion}" 
+                             Watermark="e.g. 1.0.0" 
+                             FontFamily="Consolas, Monospace"/>
+                </StackPanel>
+                
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
