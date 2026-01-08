@@ -6,6 +6,8 @@
         <entry key="Unpacker/App.axaml" value="Unpacker/Unpacker.csproj" />
         <entry key="Unpacker/AppInfoCard.axaml" value="Unpacker/Unpacker.csproj" />
         <entry key="Unpacker/FileCard.axaml" value="Unpacker/Unpacker.csproj" />
+        <entry key="Unpacker/InstallActions.axaml" value="Unpacker/Unpacker.csproj" />
+        <entry key="Unpacker/SourceCard.axaml" value="Unpacker/Unpacker.csproj" />
         <entry key="Unpacker/TopSection.axaml" value="Unpacker/Unpacker.csproj" />
         <entry key="Unpacker/Views/MainWindow.axaml" value="Unpacker/Unpacker.csproj" />
       </map>
