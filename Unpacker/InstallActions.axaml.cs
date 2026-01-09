@@ -1,6 +1,11 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Diagnostics.Screenshots;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
+using CommunityToolkit.Mvvm.ComponentModel.__Internals;
 
 namespace Unpacker;
 
@@ -11,8 +16,8 @@ public partial class InstallActions : UserControl
         InitializeComponent();
         DataContext = this;
     }
-
-    // --- 1. Source Path ---
+    
+    // Source Path
     public static readonly StyledProperty<string> SourcePathProperty =
         AvaloniaProperty.Register<InstallActions, string>(nameof(SourcePath), "");
 
@@ -22,7 +27,7 @@ public partial class InstallActions : UserControl
         set => SetValue(SourcePathProperty, value);
     }
 
-    // --- 2. System Wide Toggle ---
+    // system wide toggle ( install to opt)
     public static readonly StyledProperty<bool> IsSystemWideProperty =
         AvaloniaProperty.Register<InstallActions, bool>(nameof(IsSystemWide), true);
 
@@ -38,8 +43,8 @@ public partial class InstallActions : UserControl
             ShieldOpacity = value ? 1.0 : 0.0;
         }
     }
-
-    // --- 3. Install Button Text (Now a Real Property) ---
+    
+    // install button text
     public static readonly StyledProperty<string> InstallButtonTextProperty =
         AvaloniaProperty.Register<InstallActions, string>(nameof(InstallButtonText), "Install (Admin)");
 
@@ -49,7 +54,7 @@ public partial class InstallActions : UserControl
         set => SetValue(InstallButtonTextProperty, value);
     }
 
-    // --- 4. Shield Opacity (Now a Real Property) ---
+    // Shield Opacity
     public static readonly StyledProperty<double> ShieldOpacityProperty =
         AvaloniaProperty.Register<InstallActions, double>(nameof(ShieldOpacity), 1.0);
 
@@ -59,10 +64,31 @@ public partial class InstallActions : UserControl
         set => SetValue(ShieldOpacityProperty, value);
     }
 
-    // --- Events ---
-    private void OnBrowseClick(object sender, RoutedEventArgs e)
+    // EVENTS
+    private async void OnBrowseClick(object sender, RoutedEventArgs e)
     {
-        // TODO: File picker logic
+        var topLevel = TopLevel.GetTopLevel(this);
+
+        if (topLevel == null) return;
+
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Open Archive",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Archive Files")
+                {
+                    Patterns = new[] { "*.tar.gz", "*.zip", "*.tar.xz", "*.tar", "*.7z", "*.rar" }
+                },
+                FilePickerFileTypes.All
+            }
+        });
+
+        if (files.Count > 0)
+        {
+            SourcePath = files[0].Path.LocalPath;
+        }
     }
 
     private void OnInstallClick(object sender, RoutedEventArgs e)
