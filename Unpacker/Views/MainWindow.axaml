@@ -17,8 +17,11 @@
         <!--
         <root:FileCard Title="Obsidian-1.0.tar.gz" />
         -->
-        <root:AppInfoCard/>
-        <root:InstallActions />
+        <root:AppInfoCard AppName="{Binding AppName}" 
+                          AppVersion="{Binding AppVersion}"/>
+        
+        <root:InstallActions SourcePath="{Binding FilePath, Mode=TwoWay}"
+                             IsSystemWide="{Binding IsSystemWide, Mode=TwoWay}"/>
     </StackPanel>
 
 </Window>

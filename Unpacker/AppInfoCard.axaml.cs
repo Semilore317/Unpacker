@@ -28,4 +28,9 @@ public partial class AppInfoCard : UserControl
         get => GetValue(AppVersionProperty);
         set => SetValue(AppVersionProperty, value);
     }
+    
+    // Events
+    
+    // event handler for updating archive path
+    //public void UpdateNamePath
 }
