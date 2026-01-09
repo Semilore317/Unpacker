@@ -11,7 +11,7 @@
         Title="Unpacker"
         Background="#121212">
 
-    <StackPanel Margin="40" Spacing="20" MaxWidth="600" MaxHeight="400">
+    <StackPanel Margin="40" Spacing="20" MaxWidth="500" MaxHeight="400">
         <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" Margin="0,0,0,20"/>
         
         <!--
