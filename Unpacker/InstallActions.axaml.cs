@@ -67,13 +67,14 @@ public partial class InstallActions : UserControl
     // EVENTS
     private async void OnBrowseClick(object sender, RoutedEventArgs e)
     {
+        // abstraction for x11/wayland topLevel handling
         var topLevel = TopLevel.GetTopLevel(this);
 
         if (topLevel == null) return;
 
         var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Open Archive",
+            Title = "Select Archive to Install",
             AllowMultiple = false,
             FileTypeFilter = new[]
             {

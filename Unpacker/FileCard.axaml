@@ -13,7 +13,8 @@
                     CornerRadius="4"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
-
+                
+                <!-- replace cover with actual icon thumbnail when archive is selected -->
                 <Image Source="avares://Unpacker/Assets/icone-de-dossier-symbole-png-verte.png"
                        Width="24"
                        Height="24"

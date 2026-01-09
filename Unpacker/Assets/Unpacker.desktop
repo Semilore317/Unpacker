@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Unpacker
+Comment=Simplify installation from archives
+Path=/opt/unpacker
+Exec=/opt/unpacker --disable-gpu %u
+Icon=unpacker
+Type=Application
+StartupNotify=True
+Categories=Utility;Archiving;
+StartupWMClass=unpacker
+MimeType=x-scheme-handler/unpacker
+Terminal=False
