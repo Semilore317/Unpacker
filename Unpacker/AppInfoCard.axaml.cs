@@ -28,6 +28,26 @@ public partial class AppInfoCard : UserControl
         get => GetValue(AppVersionProperty);
         set => SetValue(AppVersionProperty, value);
     }
+
+    // Icon Bitmap
+    public static readonly StyledProperty<Avalonia.Media.Imaging.Bitmap?> IconBitmapProperty =
+        AvaloniaProperty.Register<AppInfoCard, Avalonia.Media.Imaging.Bitmap?>(nameof(IconBitmap));
+
+    public Avalonia.Media.Imaging.Bitmap? IconBitmap
+    {
+        get => GetValue(IconBitmapProperty);
+        set => SetValue(IconBitmapProperty, value);
+    }
+
+    // Select Icon Command
+    public static readonly StyledProperty<System.Windows.Input.ICommand?> SelectIconCommandProperty =
+        AvaloniaProperty.Register<AppInfoCard, System.Windows.Input.ICommand?>(nameof(SelectIconCommand));
+
+    public System.Windows.Input.ICommand? SelectIconCommand
+    {
+        get => GetValue(SelectIconCommandProperty);
+        set => SetValue(SelectIconCommandProperty, value);
+    }
     
     // Events
     

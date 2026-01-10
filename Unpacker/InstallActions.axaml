@@ -47,7 +47,9 @@
                 </StackPanel>
 
                 <local:AppInfoCard AppName="{Binding AppName, Mode=TwoWay}" 
-                                   AppVersion="{Binding AppVersion, Mode=TwoWay}"/>
+                                   AppVersion="{Binding AppVersion, Mode=TwoWay}"
+                                   IconBitmap="{Binding AppIconBitmap}"
+                                   SelectIconCommand="{Binding SelectIconCommand}"/>
 
                 <Expander Header="Advanced Options" 
                           CornerRadius="8"

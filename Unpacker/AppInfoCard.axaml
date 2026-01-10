@@ -9,16 +9,46 @@
     <Border Classes="card" Padding="20">
         <Grid ColumnDefinitions="Auto, *" ColumnSpacing="20">
             
-            <Border Grid.Column="0" 
-                    Width="64" Height="64" 
-                    CornerRadius="12" 
-                    Background="#252525"
+            <Button Grid.Column="0" 
+                    Command="{Binding #Root.SelectIconCommand}"
+                    Width="64" Height="64"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
                     VerticalAlignment="Top">
-                
-                <Image Source="avares://Unpacker/Assets/icone-de-dossier-symbole-png-verte.png"
-                       Width="32" Height="32"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
+                <Panel>
+                    <!-- Default State: SVG Icon from Assets (Recreated) -->
+                    <Border CornerRadius="12" 
+                            Background="#252525"
+                            IsVisible="{Binding #Root.IconBitmap, Converter={x:Static ObjectConverters.IsNull}}">
+                        <Viewbox Stretch="Uniform" Margin="12">
+                            <Canvas Width="24" Height="24">
+                                <!-- Main Frame -->
+                                <Path Data="M19 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3Z" 
+                                      Stroke="#059669" StrokeThickness="2" StrokeLineCap="Round"/>
+                                <!-- Sun -->
+                                <Path Data="M8.5 10C9.32843 10 10 9.32843 10 8.5C10 7.67157 9.32843 7 8.5 7C7.67157 7 7 7.67157 7 8.5C7 9.32843 7.67157 10 8.5 10Z" 
+                                      Stroke="#059669" StrokeThickness="2" StrokeLineCap="Round"/>
+                                <!-- Mountains -->
+                                <Path Data="M21 15L16 10L5 21" 
+                                      Stroke="#059669" StrokeThickness="2" StrokeLineCap="Round"/>
+                                <!-- Plus Badge -->
+                                <Ellipse Width="8" Height="8" Canvas.Left="14" Canvas.Top="2" Fill="#252525"/>
+                                <Path Data="M18 4V8M16 6H20" 
+                                      Stroke="#059669" StrokeThickness="2" StrokeLineCap="Round"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+
+                    <!-- Selected State: Custom Icon -->
+                    <Border CornerRadius="12" 
+                            ClipToBounds="True"
+                            IsVisible="{Binding #Root.IconBitmap, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <Image Source="{Binding #Root.IconBitmap}" 
+                               Stretch="UniformToFill"/>
+                    </Border>
+                </Panel>
+            </Button>
 
             <StackPanel Grid.Column="1" Spacing="12">
                 

@@ -38,6 +38,7 @@ public partial class InstallActions : UserControl
         InitializeComponent();
         DataContext = this;
         ResetViewCommand = new RelayCommand(ResetView);
+        SelectIconCommand = new RelayCommand(SelectIcon);
     }
     
     // COMMANDS
@@ -60,10 +61,139 @@ public partial class InstallActions : UserControl
         set 
         {
             SetValue(SourcePathProperty, value);
-            if (!string.IsNullOrEmpty(value))
+            if (!string.IsNullOrEmpty(value) && File.Exists(value))
             {
-                AppName = SanitizeAppName(Path.GetFileName(value));
-                AppVersion = DetectVersionFromPath(value);
+                // Fire and forget - analyze/extract in background
+                _ = ProcessSourceArchive(value);
+            }
+        }
+    }
+
+    private string? _currentExtractedPath;
+    private string? _selectedIconPath;
+
+    // App Icon Bitmap
+    public static readonly StyledProperty<Avalonia.Media.Imaging.Bitmap?> AppIconBitmapProperty =
+        AvaloniaProperty.Register<InstallActions, Avalonia.Media.Imaging.Bitmap?>(nameof(AppIconBitmap));
+
+    public Avalonia.Media.Imaging.Bitmap? AppIconBitmap
+    {
+        get => GetValue(AppIconBitmapProperty);
+        set => SetValue(AppIconBitmapProperty, value);
+    }
+
+    // Is Extracting (Status)
+    public static readonly StyledProperty<bool> IsExtractingProperty =
+        AvaloniaProperty.Register<InstallActions, bool>(nameof(IsExtracting), false);
+
+    public bool IsExtracting
+    {
+        get => GetValue(IsExtractingProperty);
+        set => SetValue(IsExtractingProperty, value);
+    }
+
+    // Select Icon Command
+    public System.Windows.Input.ICommand SelectIconCommand { get; }
+
+    private async Task ProcessSourceArchive(string path)
+    {
+        if (IsExtracting) return; // Prevent double trigger if logic allows (though setter is fine)
+        IsExtracting = true;
+        
+        try 
+        {
+            Log($"Analyzing archive: {Path.GetFileName(path)}");
+            
+            // 1. Metadata
+            AppName = SanitizeAppName(Path.GetFileName(path));
+            AppVersion = DetectVersionFromPath(path);
+            AppIconBitmap = null; // Reset icon
+            _selectedIconPath = null;
+            _currentExtractedPath = null; // Reset path
+
+            // 2. Pre-Extract
+            string tempDir = Path.Combine(Path.GetTempPath(), "Unpacker_" + Guid.NewGuid());
+            Directory.CreateDirectory(tempDir);
+            
+            Log("Extracting archive for inspection (background)...");
+            await ExtractArchive(path, tempDir);
+            
+            _currentExtractedPath = tempDir;
+            Log($"Archive extracted to: {_currentExtractedPath}");
+        }
+        catch (Exception ex)
+        {
+            Log($"Error analyzing archive: {ex.Message}");
+        }
+        finally
+        {
+            IsExtracting = false;
+        }
+    }
+
+    private async void SelectIcon()
+    {
+        if (IsExtracting)
+        {
+            Log("[WAIT] Please wait, archive is still being extracted...");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_currentExtractedPath) || !Directory.Exists(_currentExtractedPath))
+        {
+            Log("[WARNING] Extraction failed or not found. Opening picker at default location.");
+            // We allow proceeding so at least the picker opens
+        }
+        else
+        {
+             Log("[ACTION REQUIRED] Please select the icon file (png, jpg, svg) from the opened window.");
+        }
+
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null) return;
+
+        if (!string.IsNullOrEmpty(_currentExtractedPath) && Directory.Exists(_currentExtractedPath))
+        {
+            try 
+            {
+                // Uri constructor handles absolute paths correctly (adds file:// automatically)
+                // e.g. /tmp/foo -> file:///tmp/foo
+                startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(_currentExtractedPath));
+            }
+            catch (Exception ex)
+            {
+                 Log($"Warning: Could not set start location (URI error): {ex.Message}");
+                 // Fallback: Try passing path string directly if the overload exists (it often handles it better)
+                 try { startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(_currentExtractedPath); } catch {}
+            }
+        }
+
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select App Icon",
+            AllowMultiple = false,
+            SuggestedStartLocation = startLocation,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Images") { Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.svg", "*.ico" } },
+                FilePickerFileTypes.All
+            }
+        });
+
+        if (files.Count > 0)
+        {
+            var p = files[0].Path.LocalPath;
+            Log($"Icon selected: {p}");
+            _selectedIconPath = p;
+
+            try
+            {
+                using var stream = File.OpenRead(p);
+                AppIconBitmap = new Avalonia.Media.Imaging.Bitmap(stream);
+            }
+            catch (Exception ex)
+            {
+                Log($"Failed to load icon image: {ex.Message}");
             }
         }
     }
@@ -226,16 +356,23 @@ public partial class InstallActions : UserControl
         
         Log($"Starting installation for: {SourcePath}");
 
-        string tempDir = Path.Combine(Path.GetTempPath(), "Unpacker_" + Guid.NewGuid());
-        Directory.CreateDirectory(tempDir);
-        Log($"Created temporary directory: {tempDir}");
-
         try
         {
-            // 1. Extract
-            Log("Extracting archive...");
-            await ExtractArchive(SourcePath, tempDir);
-            Log("Extraction complete.");
+            string tempDir = _currentExtractedPath;
+
+            // Ensure extracted
+            if (string.IsNullOrEmpty(tempDir) || !Directory.Exists(tempDir))
+            {
+                 Log("Re-extracting archive...");
+                 tempDir = Path.Combine(Path.GetTempPath(), "Unpacker_" + Guid.NewGuid());
+                 Directory.CreateDirectory(tempDir);
+                 await ExtractArchive(SourcePath, tempDir);
+                 _currentExtractedPath = tempDir;
+            }
+            else
+            {
+                Log("Using pre-extracted files.");
+            }
 
             // 2. Detect Binary
             Log("Detecting binary...");
@@ -257,12 +394,12 @@ public partial class InstallActions : UserControl
             if (IsSystemWide)
             {
                 Log("Installing System-Wide (FPM)...");
-                await InstallSystemWideWithFpm(tempDir, binaryPath, appName, AppVersion);
+                await InstallSystemWideWithFpm(tempDir, binaryPath, appName, AppVersion, _selectedIconPath);
             }
             else
             {
                 Log("Installing User-Local...");
-                await InstallUserLocal(tempDir, binaryPath, appName);
+                await InstallUserLocal(tempDir, binaryPath, appName, _selectedIconPath);
             }
 
             Log("Installation completed successfully!");
@@ -277,15 +414,18 @@ public partial class InstallActions : UserControl
         finally
         {
             // Cleanup
-            Log("Cleaning up temporary files...");
-            try { Directory.Delete(tempDir, true); } catch (Exception cleanupEx) { Log($"Warning: Failed to clean up temp dir: {cleanupEx.Message}"); }
+            try { /* Keep temp dir for now if we want to reuse it? Or delete it always? */ 
+                  /* For now, delete it to be clean, but this means next install needs re-extract. */
+                  if (_currentExtractedPath != null) Directory.Delete(_currentExtractedPath, true); 
+                  _currentExtractedPath = null;
+            } catch (Exception cleanupEx) { Log($"Warning: Failed to clean up temp dir: {cleanupEx.Message}"); }
             
             InstallButtonText = originalText; // Reset button text for next time
             IsInstallationDone = true; // Enable the "Done" button to go back
         }
     }
 
-    private async Task InstallSystemWideWithFpm(string sourceDir, string binaryPath, string appName, string version)
+    private async Task InstallSystemWideWithFpm(string sourceDir, string binaryPath, string appName, string version, string? iconPath)
     {
         Log("Checking prerequisites...");
         if (!IsCommandAvailable("fpm"))
@@ -327,7 +467,25 @@ public partial class InstallActions : UserControl
 
         // Create Desktop File
         Log("Generating .desktop file...");
-        await CreateDesktopFile(Path.Combine(stagingDesktopDir, $"{appName}.desktop"), appName, $"/usr/bin/{appName}");
+        string finalIconPath = "";
+
+        if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
+        {
+             // Copy icon to /opt/AppName/icon.png (Installation Directory)
+             // Staging path: stagingDir/opt/AppName/icon.png
+             
+             // Ensure stagingInstallDir exists (it should be created above)
+             string iconExt = Path.GetExtension(iconPath);
+             string iconDestFile = Path.Combine(stagingInstallDir, $"icon{iconExt}");
+             
+             Log($"Copying icon to app directory: {iconDestFile}");
+             File.Copy(iconPath, iconDestFile, true);
+             
+             // Final absolute path on target system
+             finalIconPath = Path.Combine(installPrefix, $"icon{iconExt}");
+        }
+
+        await CreateDesktopFile(Path.Combine(stagingDesktopDir, $"{appName}.desktop"), appName, $"/usr/bin/{appName}", finalIconPath);
 
         // Build Package with FPM
         string outputDir = sourceDir;
@@ -402,7 +560,7 @@ public partial class InstallActions : UserControl
         Log("Package installed successfully via system package manager.");
     }
 
-    private async Task InstallUserLocal(string sourceDir, string binaryPath, string appName)
+    private async Task InstallUserLocal(string sourceDir, string binaryPath, string appName, string? iconPath)
     {
         string targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), appName); 
         string binDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
@@ -428,11 +586,22 @@ public partial class InstallActions : UserControl
         // Symlink
         sb.AppendLine($"ln -sf \"{targetDir}/{relBinaryPath}\" \"{binDir}/{appName}\"");
         
+        // Icon Logic
+        string iconLine = "";
+        if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
+        {
+             string iconExt = Path.GetExtension(iconPath);
+             sb.AppendLine($"cp \"{iconPath}\" \"{targetDir}/icon{iconExt}\"");
+             iconLine = $"Icon={targetDir}/icon{iconExt}";
+             Log($"Including icon in user installation.");
+        }
+
         // Desktop File
         sb.AppendLine($"cat > \"{desktopDir}/{appName}.desktop\" <<EOL");
         sb.AppendLine("[Desktop Entry]");
         sb.AppendLine($"Name={appName}");
         sb.AppendLine($"Exec={binDir}/{appName}");
+        if (!string.IsNullOrEmpty(iconLine)) sb.AppendLine(iconLine);
         sb.AppendLine("Type=Application");
         sb.AppendLine("Categories=Utility;");
         sb.AppendLine("Terminal=false");
@@ -525,12 +694,16 @@ public partial class InstallActions : UserControl
         }
     }
 
-    private Task CreateDesktopFile(string path, string appName, string execPath)
+    private Task CreateDesktopFile(string path, string appName, string execPath, string iconName = "")
     {
         var sb = new StringBuilder();
         sb.AppendLine("[Desktop Entry]");
         sb.AppendLine($"Name={appName}");
         sb.AppendLine($"Exec={execPath}");
+        if (!string.IsNullOrEmpty(iconName))
+        {
+            sb.AppendLine($"Icon={iconName}");
+        }
         sb.AppendLine("Type=Application");
         sb.AppendLine("Categories=Utility;");
         sb.AppendLine("Terminal=false");
