@@ -11,17 +11,19 @@
         Title="Unpacker"
         Background="#121212">
 
-    <StackPanel Margin="40" Spacing="20" MaxWidth="500" MaxHeight="400">
+    <StackPanel Margin="20" Spacing="20">
         <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" Margin="0,0,0,20"/>
         
         <!--
         <root:FileCard Title="Obsidian-1.0.tar.gz" />
         -->
-        <root:AppInfoCard AppName="{Binding AppName}" 
-                          AppVersion="{Binding AppVersion}"/>
-        
+        <!-- <root:AppInfoCard AppName="{Binding AppName}"  -->
+        <!--                   AppVersion="{Binding AppVersion}" -->
+        <!--                   IsVisible="{Binding !IsInstalling}"/> -->
+        <!-- -->
         <root:InstallActions SourcePath="{Binding FilePath, Mode=TwoWay}"
-                             IsSystemWide="{Binding IsSystemWide, Mode=TwoWay}"/>
+                             IsSystemWide="{Binding IsSystemWide, Mode=TwoWay}"
+                             IsInstalling="{Binding IsInstalling, Mode=TwoWay}"/>
     </StackPanel>
 
 </Window>

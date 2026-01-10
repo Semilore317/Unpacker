@@ -57,7 +57,35 @@ public partial class InstallActions : UserControl
     public string SourcePath
     {
         get => GetValue(SourcePathProperty);
-        set => SetValue(SourcePathProperty, value);
+        set 
+        {
+            SetValue(SourcePathProperty, value);
+            if (!string.IsNullOrEmpty(value))
+            {
+                AppName = SanitizeAppName(Path.GetFileName(value));
+                AppVersion = DetectVersionFromPath(value);
+            }
+        }
+    }
+
+    // App Name
+    public static readonly StyledProperty<string> AppNameProperty =
+        AvaloniaProperty.Register<InstallActions, string>(nameof(AppName), "Application");
+
+    public string AppName
+    {
+        get => GetValue(AppNameProperty);
+        set => SetValue(AppNameProperty, value);
+    }
+
+    // App Version
+    public static readonly StyledProperty<string> AppVersionProperty =
+        AvaloniaProperty.Register<InstallActions, string>(nameof(AppVersion), "1.0.0");
+
+    public string AppVersion
+    {
+        get => GetValue(AppVersionProperty);
+        set => SetValue(AppVersionProperty, value);
     }
 
     // system wide toggle ( install to opt)
@@ -220,15 +248,16 @@ public partial class InstallActions : UserControl
                 return;
             }
 
-            string appName = SanitizeAppName(Path.GetFileNameWithoutExtension(SourcePath));
+            string appName = SanitizeAppName(AppName); // Sanitize the user-edited name just in case
             Log($"Detected binary: {Path.GetFileName(binaryPath)}");
-            Log($"Inferred App Name: {appName}");
+            Log($"App Name: {appName}");
+            Log($"Version: {AppVersion}");
 
             // 3. Install
             if (IsSystemWide)
             {
                 Log("Installing System-Wide (FPM)...");
-                await InstallSystemWideWithFpm(tempDir, binaryPath, appName);
+                await InstallSystemWideWithFpm(tempDir, binaryPath, appName, AppVersion);
             }
             else
             {
@@ -256,7 +285,7 @@ public partial class InstallActions : UserControl
         }
     }
 
-    private async Task InstallSystemWideWithFpm(string sourceDir, string binaryPath, string appName)
+    private async Task InstallSystemWideWithFpm(string sourceDir, string binaryPath, string appName, string version)
     {
         Log("Checking prerequisites...");
         if (!IsCommandAvailable("fpm"))
@@ -267,7 +296,7 @@ public partial class InstallActions : UserControl
         string? packageType = GetSystemPackageType();
         if (packageType == null)
         {
-            throw new Exception("Unsupported system package manager (could not detect apt or rpm/dnf).");
+            throw new Exception("Unsupported system package manager (could not detect apt, dnf, rpm, or pacman).");
         }
         Log($"Detected Package Manager Type: {packageType}");
 
@@ -302,7 +331,8 @@ public partial class InstallActions : UserControl
 
         // Build Package with FPM
         string outputDir = sourceDir;
-        string version = "1.0"; // TODO: Detect version?
+        // Version is passed in now
+        Log($"Using version: {version}");
         
         Log($"Building {packageType} package with FPM...");
         
@@ -312,10 +342,12 @@ public partial class InstallActions : UserControl
         await RunCommand("fpm", fpmArgs);
 
         // Find the generated package
-        var packageFile = Directory.GetFiles(outputDir, $"*.{packageType}").OrderByDescending(f => new FileInfo(f).LastWriteTime).FirstOrDefault();
+        // Find the generated package
+        string searchPattern = packageType == "pacman" ? "*.pkg.tar.*" : $"*.{packageType}*";
+        var packageFile = Directory.GetFiles(outputDir, searchPattern).OrderByDescending(f => new FileInfo(f).LastWriteTime).FirstOrDefault();
         if (packageFile == null)
         {
-            throw new Exception($"FPM failed to generate a .{packageType} file.");
+            throw new Exception($"FPM failed to generate a package file (searched for {searchPattern}).");
         }
 
         Log($"Package created successfully: {packageFile}");
@@ -324,23 +356,43 @@ public partial class InstallActions : UserControl
         await InstallPackage(packageFile, packageType);
     }
 
+    private string DetectVersionFromPath(string path)
+    {
+        // Try to match standard version patterns like 1.2.3, v1.2, etc.
+        var fileName = Path.GetFileNameWithoutExtension(path);
+        // Regex for x.y.z versioning
+        var match = System.Text.RegularExpressions.Regex.Match(fileName, @"(\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9]+)?)");
+        if (match.Success)
+        {
+            return match.Groups[1].Value;
+        }
+        return "1.0.0"; // Fallback
+    }
+
     private async Task InstallPackage(string packageFile, string packageType)
     {
         string installCmd = "pkexec";
         string installArgs = "";
 
+        // Ensure we work with absolute paths
+        packageFile = Path.GetFullPath(packageFile);
+
         if (packageType == "deb")
         {
-            // apt-get install ./package.deb
-            // Using a relative path with apt often requires ./
-            // But better to use absolute path for safety
+            // apt-get install -y /path/to/package.deb
+            // apt generally prefers files to be prefixed if they are local, but absolute path is best.
             installArgs = $"apt-get install -y \"{packageFile}\"";
+        }
+        else if (packageType == "pacman")
+        {
+             // pacman -U package.pkg.tar.zst
+             installArgs = $"pacman -U --noconfirm \"{packageFile}\"";
         }
         else
         {
             string pkgMgr = IsCommandAvailable("dnf") ? "dnf" : "rpm";
-            if (pkgMgr == "rpm") installArgs = $"-i \"{packageFile}\" "; 
-            else installArgs = $"install -y \"{packageFile}\" "; 
+            if (pkgMgr == "rpm") installArgs = $"rpm -Uvh --force \"{packageFile}\" "; 
+            else installArgs = $"dnf install -y \"{packageFile}\" "; 
         }
 
         Log($"Requesting sudo permissions to install package...");
@@ -403,6 +455,7 @@ public partial class InstallActions : UserControl
 
     private string? GetSystemPackageType()
     {
+        if (IsCommandAvailable("pacman")) return "pacman";
         if (IsCommandAvailable("apt-get")) return "deb";
         if (IsCommandAvailable("dnf") || IsCommandAvailable("rpm")) return "rpm";
         return null;
@@ -552,10 +605,22 @@ public partial class InstallActions : UserControl
         var appRun = candidates.FirstOrDefault(c => Path.GetFileName(c.Path).Equals("AppRun", StringComparison.OrdinalIgnoreCase));
         if (appRun.Path != null) return appRun.Path;
 
-        // 2. Exact Name Match (contains appName)
+        // 2. Name Match (Relaxed)
+        // Check if candidate name contains appName OR appName contains candidate name (e.g. beekeeper-studio vs beekeeper-studio-553)
+        // Also prioritize standard names like 'app', 'run', 'start' if no direct match logic works best? 
+        // Better: Prefer candidates that look like the "Main" name.
+        
+        // Strip dashes and version numbers for comparison
+        var simpleAppName = new string(appName.Where(char.IsLetter).ToArray()).ToLowerInvariant();
+        
         var nameMatch = candidates
-            .Where(c => Path.GetFileName(c.Path).Contains(appName, StringComparison.OrdinalIgnoreCase))
+            .Where(c => 
+            {
+                var simpleName = new string(Path.GetFileNameWithoutExtension(c.Path).Where(char.IsLetter).ToArray()).ToLowerInvariant();
+                return simpleName.Contains(simpleAppName) || simpleAppName.Contains(simpleName);
+            })
             .OrderByDescending(c => c.IsElf) // Prefer ELF matches
+            .ThenBy(c => Path.GetFileName(c.Path).Length) // Prefer shorter names (e.g. 'beekeeper-studio' over 'beekeeper-studio-bin')
             .FirstOrDefault();
         
         if (nameMatch.Path != null) return nameMatch.Path;

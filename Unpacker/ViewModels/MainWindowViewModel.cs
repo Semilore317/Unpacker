@@ -13,6 +13,9 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isSystemWide = true;
 
+    [ObservableProperty]
+    private bool _isInstalling;
+
     public string AppName
     {
         get

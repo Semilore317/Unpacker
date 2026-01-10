@@ -46,6 +46,9 @@
                     </Border>
                 </StackPanel>
 
+                <local:AppInfoCard AppName="{Binding AppName, Mode=TwoWay}" 
+                                   AppVersion="{Binding AppVersion, Mode=TwoWay}"/>
+
                 <Expander Header="Advanced Options" 
                           CornerRadius="8"
                           Background="#252525">
