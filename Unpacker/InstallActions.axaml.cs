@@ -14,12 +14,40 @@ using Avalonia.Platform.Storage;
 
 namespace Unpacker;
 
+// Simple RelayCommand implementation if not available
+public class RelayCommand : System.Windows.Input.ICommand
+{
+    private readonly Action _execute;
+    private readonly Func<bool> _canExecute;
+
+    public RelayCommand(Action execute, Func<bool> canExecute = null)
+    {
+        _execute = execute;
+        _canExecute = canExecute;
+    }
+
+    public bool CanExecute(object parameter) => _canExecute == null || _canExecute();
+    public void Execute(object parameter) => _execute();
+    public event EventHandler CanExecuteChanged;
+}
+
 public partial class InstallActions : UserControl
 {
     public InstallActions()
     {
         InitializeComponent();
         DataContext = this;
+        ResetViewCommand = new RelayCommand(ResetView);
+    }
+    
+    // COMMANDS
+    public System.Windows.Input.ICommand ResetViewCommand { get; }
+
+    private void ResetView()
+    {
+        IsInstalling = false;
+        IsInstallationDone = false;
+        InstallationLogs = "";
     }
     
     // Source Path
@@ -67,6 +95,36 @@ public partial class InstallActions : UserControl
     {
         get => GetValue(ShieldOpacityProperty);
         set => SetValue(ShieldOpacityProperty, value);
+    }
+
+    // IsInstalling (View State)
+    public static readonly StyledProperty<bool> IsInstallingProperty =
+        AvaloniaProperty.Register<InstallActions, bool>(nameof(IsInstalling), false);
+
+    public bool IsInstalling
+    {
+        get => GetValue(IsInstallingProperty);
+        set => SetValue(IsInstallingProperty, value);
+    }
+
+    // IsInstallationDone (View State)
+    public static readonly StyledProperty<bool> IsInstallationDoneProperty =
+        AvaloniaProperty.Register<InstallActions, bool>(nameof(IsInstallationDone), false);
+
+    public bool IsInstallationDone
+    {
+        get => GetValue(IsInstallationDoneProperty);
+        set => SetValue(IsInstallationDoneProperty, value);
+    }
+
+    // Log Caret Index (Auto-scroll placeholder)
+    public static readonly StyledProperty<int> LogCaretIndexProperty =
+        AvaloniaProperty.Register<InstallActions, int>(nameof(LogCaretIndex), 0);
+
+    public int LogCaretIndex
+    {
+        get => GetValue(LogCaretIndexProperty);
+        set => SetValue(LogCaretIndexProperty, value);
     }
 
     // Installation Logs
@@ -132,7 +190,12 @@ public partial class InstallActions : UserControl
         // Visual feedback
         var originalText = InstallButtonText;
         InstallButtonText = "Installing...";
+        
+        // Switch View
+        IsInstalling = true;
+        IsInstallationDone = false;
         InstallationLogs = ""; // Clear logs
+        
         Log($"Starting installation for: {SourcePath}");
 
         string tempDir = Path.Combine(Path.GetTempPath(), "Unpacker_" + Guid.NewGuid());
@@ -146,32 +209,31 @@ public partial class InstallActions : UserControl
             await ExtractArchive(SourcePath, tempDir);
             Log("Extraction complete.");
 
-            // 2. Detect Executable
-            Log("Detecting executable...");
-            string? exePath = DetectExecutable(tempDir);
-            if (exePath == null)
+            // 2. Detect Binary
+            Log("Detecting binary...");
+            string? binaryPath = DetectExecutable(tempDir);
+            if (binaryPath == null)
             {
-                Log("Error: No executable found in the archive.");
-                InstallButtonText = "Error: No Exe Found";
-                await Task.Delay(2000);
-                InstallButtonText = originalText;
+                Log("Error: No binary (ELF) found in the archive.");
+                InstallButtonText = "Error: No Binary Found";
+                IsInstallationDone = true; // Allow user to go back
                 return;
             }
 
             string appName = SanitizeAppName(Path.GetFileNameWithoutExtension(SourcePath));
-            Log($"Detected executable: {Path.GetFileName(exePath)}");
+            Log($"Detected binary: {Path.GetFileName(binaryPath)}");
             Log($"Inferred App Name: {appName}");
 
             // 3. Install
             if (IsSystemWide)
             {
                 Log("Installing System-Wide (FPM)...");
-                await InstallSystemWideWithFpm(tempDir, exePath, appName);
+                await InstallSystemWideWithFpm(tempDir, binaryPath, appName);
             }
             else
             {
                 Log("Installing User-Local...");
-                await InstallUserLocal(tempDir, exePath, appName);
+                await InstallUserLocal(tempDir, binaryPath, appName);
             }
 
             Log("Installation completed successfully!");
@@ -180,7 +242,7 @@ public partial class InstallActions : UserControl
         catch (Exception ex)
         {
             Log($"FATAL ERROR: {ex.Message}");
-            if (ex.StackTrace != null) Log(ex.StackTrace); // Optional: log stack trace
+            if (ex.StackTrace != null) Log(ex.StackTrace); 
             InstallButtonText = "Error";
         }
         finally
@@ -189,12 +251,12 @@ public partial class InstallActions : UserControl
             Log("Cleaning up temporary files...");
             try { Directory.Delete(tempDir, true); } catch (Exception cleanupEx) { Log($"Warning: Failed to clean up temp dir: {cleanupEx.Message}"); }
             
-            await Task.Delay(2000);
-            InstallButtonText = originalText; // Reset button
+            InstallButtonText = originalText; // Reset button text for next time
+            IsInstallationDone = true; // Enable the "Done" button to go back
         }
     }
 
-    private async Task InstallSystemWideWithFpm(string sourceDir, string exePath, string appName)
+    private async Task InstallSystemWideWithFpm(string sourceDir, string binaryPath, string appName)
     {
         Log("Checking prerequisites...");
         if (!IsCommandAvailable("fpm"))
@@ -226,9 +288,9 @@ public partial class InstallActions : UserControl
         Log($"Copying files to {stagingInstallDir}...");
         CopyDirectory(sourceDir, stagingInstallDir, exclude: "_staging");
 
-        // Create Symlink for /usr/bin/AppName -> /opt/AppName/path/to/exe
-        string relExePath = Path.GetRelativePath(sourceDir, exePath);
-        string targetPath = Path.Combine(installPrefix, relExePath);
+        // Create Symlink for /usr/bin/AppName -> /opt/AppName/path/to/binary
+        string relBinaryPath = Path.GetRelativePath(sourceDir, binaryPath);
+        string targetPath = Path.Combine(installPrefix, relBinaryPath);
         string symlinkPath = Path.Combine(stagingBinDir, appName);
         
         Log($"Creating symlink: {symlinkPath} -> {targetPath}");
@@ -288,7 +350,7 @@ public partial class InstallActions : UserControl
         Log("Package installed successfully via system package manager.");
     }
 
-    private async Task InstallUserLocal(string sourceDir, string exePath, string appName)
+    private async Task InstallUserLocal(string sourceDir, string binaryPath, string appName)
     {
         string targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), appName); 
         string binDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
@@ -297,7 +359,7 @@ public partial class InstallActions : UserControl
         Log($"Installing to user local directory: {targetDir}");
         Log($"Bin directory: {binDir}");
 
-        string relExePath = Path.GetRelativePath(sourceDir, exePath);
+        string relBinaryPath = Path.GetRelativePath(sourceDir, binaryPath);
         
         // Generate script
         var sb = new StringBuilder();
@@ -312,7 +374,7 @@ public partial class InstallActions : UserControl
         sb.AppendLine($"cp -r \"{sourceDir}/\"* \"{targetDir}/\" 2>/dev/null || true");
         
         // Symlink
-        sb.AppendLine($"ln -sf \"{targetDir}/{relExePath}\" \"{binDir}/{appName}");
+        sb.AppendLine($"ln -sf \"{targetDir}/{relBinaryPath}\" \"{binDir}/{appName}\"");
         
         // Desktop File
         sb.AppendLine($"cat > \"{desktopDir}/{appName}.desktop\" <<EOL");
@@ -452,16 +514,67 @@ public partial class InstallActions : UserControl
     private string? DetectExecutable(string dir)
     {
         var files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories);
-        var elfFiles = new List<string>();
+        Log($"Scanning {files.Length} files for executables...");
+
+        var candidates = new List<(string Path, bool IsElf, bool IsScript)>();
+
         foreach (var file in files)
         {
-            if (IsElf(file)) elfFiles.Add(file);
+            if (new FileInfo(file).Length == 0) continue;
+            
+            bool isElf = IsElf(file);
+            bool isScript = !isElf && IsShellScript(file);
+
+            if (isElf || isScript)
+            {
+                candidates.Add((file, isElf, isScript));
+            }
         }
 
-        if (elfFiles.Count == 0) return null;
-        if (elfFiles.Count == 1) return elfFiles[0];
+        if (candidates.Count == 0)
+        {
+            Log("Debug info: No candidates found. Listing all files:");
+            foreach (var f in files.Take(20)) Log($" - {Path.GetFileName(f)}");
+            if (files.Length > 20) Log($" ... and {files.Length - 20} more.");
+            return null;
+        }
 
-        return elfFiles.OrderByDescending(f => new FileInfo(f).Length).FirstOrDefault();
+        // Strategy:
+        // 1. Prefer 'AppRun' (AppImage standard)
+        // 2. Prefer Exact Match with AppName (e.g. 'beekeeper-studio')
+        // 3. Prefer ELFs over Scripts
+        // 4. Fallback to largest file (usually the binary)
+
+        var appName = SanitizeAppName(Path.GetFileNameWithoutExtension(SourcePath));
+        Log($"Filtering candidates for app name: {appName}");
+
+        // 1. AppRun
+        var appRun = candidates.FirstOrDefault(c => Path.GetFileName(c.Path).Equals("AppRun", StringComparison.OrdinalIgnoreCase));
+        if (appRun.Path != null) return appRun.Path;
+
+        // 2. Exact Name Match (contains appName)
+        var nameMatch = candidates
+            .Where(c => Path.GetFileName(c.Path).Contains(appName, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(c => c.IsElf) // Prefer ELF matches
+            .FirstOrDefault();
+        
+        if (nameMatch.Path != null) return nameMatch.Path;
+
+        // 3. Fallback: Largest ELF
+        var largestElf = candidates
+            .Where(c => c.IsElf)
+            .OrderByDescending(c => new FileInfo(c.Path).Length)
+            .FirstOrDefault();
+        
+        if (largestElf.Path != null) return largestElf.Path;
+
+        // 4. Fallback: Any script (maybe 'run.sh' or 'start.sh')
+        var script = candidates
+            .Where(c => c.IsScript)
+            .OrderBy(c => Path.GetFileName(c.Path).Length) // Shortest name often 'run'
+            .FirstOrDefault();
+            
+        return script.Path;
     }
 
     private bool IsElf(string path)
@@ -473,9 +586,19 @@ public partial class InstallActions : UserControl
             if (fs.Read(buffer, 0, 4) < 4) return false;
             return buffer[0] == 0x7F && buffer[1] == 0x45 && buffer[2] == 0x4C && buffer[3] == 0x46;
         }
-        catch
+        catch { return false; }
+    }
+
+    private bool IsShellScript(string path)
+    {
+        try
         {
-            return false;
+            // Check for Shebang #!
+            using var fs = File.OpenRead(path);
+            var buffer = new byte[2];
+            if (fs.Read(buffer, 0, 2) < 2) return false;
+            return buffer[0] == '#' && buffer[1] == '!';
         }
+        catch { return false; }
     }
 }
