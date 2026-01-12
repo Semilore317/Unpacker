@@ -104,9 +104,10 @@ public partial class InstallActions : UserControl
         {
             Log($"Analyzing archive: {Path.GetFileName(path)}");
             
-            // 1. Metadata
-            AppName = SanitizeAppName(Path.GetFileName(path));
-            AppVersion = DetectVersionFromPath(path);
+            // 1. Metadata - use StripArchiveExtensions for proper name extraction
+            string baseName = StripArchiveExtensions(Path.GetFileName(path));
+            AppName = SanitizeAppName(baseName);
+            AppVersion = DetectVersionFromPath(baseName);
             AppIconBitmap = null; // Reset icon
             _selectedIconPath = null;
             _currentExtractedPath = null; // Reset path
@@ -152,6 +153,7 @@ public partial class InstallActions : UserControl
         var topLevel = TopLevel.GetTopLevel(this);
         if (topLevel == null) return;
 
+        IStorageFolder? startLocation = null;
         if (!string.IsNullOrEmpty(_currentExtractedPath) && Directory.Exists(_currentExtractedPath))
         {
             try 
@@ -500,8 +502,13 @@ public partial class InstallActions : UserControl
         await RunCommand("fpm", fpmArgs);
 
         // Find the generated package
-        // Find the generated package
-        string searchPattern = packageType == "pacman" ? "*.pkg.tar.*" : $"*.{packageType}*";
+        string searchPattern = packageType switch
+        {
+            "pacman" => "*.pkg.tar.*",
+            "deb" => "*.deb",
+            "rpm" => "*.rpm",
+            _ => "*.*"
+        };
         var packageFile = Directory.GetFiles(outputDir, searchPattern).OrderByDescending(f => new FileInfo(f).LastWriteTime).FirstOrDefault();
         if (packageFile == null)
         {
@@ -514,12 +521,12 @@ public partial class InstallActions : UserControl
         await InstallPackage(packageFile, packageType);
     }
 
-    private string DetectVersionFromPath(string path)
+    private string DetectVersionFromPath(string nameOrPath)
     {
         // Try to match standard version patterns like 1.2.3, v1.2, etc.
-        var fileName = Path.GetFileNameWithoutExtension(path);
+        // Note: Caller should pass already-stripped base name (without extensions)
         // Regex for x.y.z versioning
-        var match = System.Text.RegularExpressions.Regex.Match(fileName, @"(\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9]+)?)");
+        var match = System.Text.RegularExpressions.Regex.Match(nameOrPath, @"(\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9]+)?)");
         if (match.Success)
         {
             return match.Groups[1].Value;
@@ -529,34 +536,41 @@ public partial class InstallActions : UserControl
 
     private async Task InstallPackage(string packageFile, string packageType)
     {
-        string installCmd = "pkexec";
-        string installArgs = "";
-
         // Ensure we work with absolute paths
         packageFile = Path.GetFullPath(packageFile);
 
+        // Build argument list - using ArgumentList avoids shell quoting issues
+        var args = new List<string>();
+        
         if (packageType == "deb")
         {
-            // apt-get install -y /path/to/package.deb
-            // apt generally prefers files to be prefixed if they are local, but absolute path is best.
-            installArgs = $"apt-get install -y \"{packageFile}\"";
+            // pkexec sh -c "apt-get install -y /path/to/file.deb"
+            args.Add("sh");
+            args.Add("-c");
+            args.Add($"apt-get install -y '{packageFile}'");
         }
         else if (packageType == "pacman")
         {
-             // pacman -U package.pkg.tar.zst
-             installArgs = $"pacman -U --noconfirm \"{packageFile}\"";
+            // pkexec sh -c "pacman -U --noconfirm /path/to/file.pkg.tar.zst"
+            args.Add("sh");
+            args.Add("-c");
+            args.Add($"pacman -U --noconfirm '{packageFile}'");
         }
         else
         {
             string pkgMgr = IsCommandAvailable("dnf") ? "dnf" : "rpm";
-            if (pkgMgr == "rpm") installArgs = $"rpm -Uvh --force \"{packageFile}\" "; 
-            else installArgs = $"dnf install -y \"{packageFile}\" "; 
+            args.Add("sh");
+            args.Add("-c");
+            if (pkgMgr == "rpm") 
+                args.Add($"rpm -Uvh --force '{packageFile}'");
+            else 
+                args.Add($"dnf install -y '{packageFile}'");
         }
 
         Log($"Requesting sudo permissions to install package...");
-        Log($"Command: {installCmd} {installArgs}");
+        Log($"Command: pkexec {string.Join(" ", args.Select(a => $"\"{a}\""))}");
         
-        await RunCommand(installCmd, installArgs);
+        await RunCommandWithArgs("pkexec", args);
         Log("Package installed successfully via system package manager.");
     }
 
@@ -617,9 +631,21 @@ public partial class InstallActions : UserControl
 
     private string SanitizeAppName(string input)
     {
-        if (input.EndsWith(".tar")) input = Path.GetFileNameWithoutExtension(input);
+        // Input should already be stripped of extensions by StripArchiveExtensions
         var safe = new string(input.Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_').ToArray());
         return string.IsNullOrEmpty(safe) ? "unpacked-app" : safe.ToLowerInvariant();
+    }
+
+    private string StripArchiveExtensions(string fileName)
+    {
+        // Handle multi-part extensions like .tar.gz, .tar.xz
+        string[] extensions = { ".tar.gz", ".tar.xz", ".tar.bz2", ".tgz", ".tar", ".zip", ".7z", ".rar" };
+        foreach (var ext in extensions)
+        {
+            if (fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+                return fileName[..^ext.Length];
+        }
+        return Path.GetFileNameWithoutExtension(fileName);
     }
 
     private string? GetSystemPackageType()
@@ -666,13 +692,54 @@ public partial class InstallActions : UserControl
         var p = Process.Start(psi);
         if (p == null) throw new Exception($"Failed to start {fileName}");
 
+        // Read stdout/stderr BEFORE WaitForExitAsync to prevent deadlock
+        // when output buffers fill up
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
+        
         await p.WaitForExitAsync();
+        
+        string stdout = await stdoutTask;
+        string stderr = await stderrTask;
 
         if (p.ExitCode != 0)
         {
-            string stdout = await p.StandardOutput.ReadToEndAsync();
-            string stderr = await p.StandardError.ReadToEndAsync();
             throw new Exception($"Command '{fileName} {args}' failed with code {p.ExitCode}.\nStdOut: {stdout}\nStdErr: {stderr}");
+        }
+    }
+
+    private async Task RunCommandWithArgs(string fileName, IEnumerable<string> args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        
+        // Add each argument as a discrete item - this preserves arguments with spaces
+        foreach (var arg in args)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        var p = Process.Start(psi);
+        if (p == null) throw new Exception($"Failed to start {fileName}");
+
+        // Read stdout/stderr BEFORE WaitForExitAsync to prevent deadlock
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
+        
+        await p.WaitForExitAsync();
+        
+        string stdout = await stdoutTask;
+        string stderr = await stderrTask;
+
+        if (p.ExitCode != 0)
+        {
+            throw new Exception($"Command '{fileName}' failed with code {p.ExitCode}.\nStdOut: {stdout}\nStdErr: {stderr}");
         }
     }
 
@@ -765,40 +832,43 @@ public partial class InstallActions : UserControl
             return null;
         }
 
-        // Strategy:
-        // 1. Prefer 'AppRun' (AppImage standard)
-        // 2. Prefer Exact Match with AppName (e.g. 'beekeeper-studio')
-        // 3. Prefer ELFs over Scripts
-        // 4. Fallback to largest file (usually the binary)
+        // Strategy for tarball installations:
+        // 1. Prefer ELF binary matching the app name
+        // 2. Fallback to largest ELF (usually the main application binary)
+        // 3. Only use scripts as last resort
 
-        var appName = SanitizeAppName(Path.GetFileNameWithoutExtension(SourcePath));
+        // Use StripArchiveExtensions to properly handle .tar.gz, .tar.xz, etc.
+        var appName = SanitizeAppName(StripArchiveExtensions(Path.GetFileName(SourcePath)));
+        
+        // Debug: Show candidate breakdown
+        int elfCount = candidates.Count(c => c.IsElf);
+        int scriptCount = candidates.Count(c => c.IsScript);
+        Log($"Found {elfCount} ELF binaries and {scriptCount} scripts");
+        
+        if (elfCount > 0)
+        {
+            Log($"ELF candidates: {string.Join(", ", candidates.Where(c => c.IsElf).Take(5).Select(c => Path.GetFileName(c.Path)))}");
+        }
+        
         Log($"Filtering candidates for app name: {appName}");
 
-        // 1. AppRun
-        var appRun = candidates.FirstOrDefault(c => Path.GetFileName(c.Path).Equals("AppRun", StringComparison.OrdinalIgnoreCase));
-        if (appRun.Path != null) return appRun.Path;
-
-        // 2. Name Match (Relaxed)
-        // Check if candidate name contains appName OR appName contains candidate name (e.g. beekeeper-studio vs beekeeper-studio-553)
-        // Also prioritize standard names like 'app', 'run', 'start' if no direct match logic works best? 
-        // Better: Prefer candidates that look like the "Main" name.
-        
-        // Strip dashes and version numbers for comparison
+        // 2. Name Match - ONLY for ELF binaries (scripts like bump.sh should not match)
+        // Strip non-letters for fuzzy comparison
         var simpleAppName = new string(appName.Where(char.IsLetter).ToArray()).ToLowerInvariant();
         
         var nameMatch = candidates
+            .Where(c => c.IsElf) // Only consider ELF binaries for name matching
             .Where(c => 
             {
                 var simpleName = new string(Path.GetFileNameWithoutExtension(c.Path).Where(char.IsLetter).ToArray()).ToLowerInvariant();
                 return simpleName.Contains(simpleAppName) || simpleAppName.Contains(simpleName);
             })
-            .OrderByDescending(c => c.IsElf) // Prefer ELF matches
-            .ThenBy(c => Path.GetFileName(c.Path).Length) // Prefer shorter names (e.g. 'beekeeper-studio' over 'beekeeper-studio-bin')
+            .OrderBy(c => Path.GetFileName(c.Path).Length) // Prefer shorter names (e.g. 'beekeeper-studio' over 'beekeeper-studio-bin')
             .FirstOrDefault();
         
         if (nameMatch.Path != null) return nameMatch.Path;
 
-        // 3. Fallback: Largest ELF
+        // 3. Fallback: Largest ELF (usually the main binary for Electron apps, etc.)
         var largestElf = candidates
             .Where(c => c.IsElf)
             .OrderByDescending(c => new FileInfo(c.Path).Length)
@@ -806,10 +876,10 @@ public partial class InstallActions : UserControl
         
         if (largestElf.Path != null) return largestElf.Path;
 
-        // 4. Fallback: Any script (maybe 'run.sh' or 'start.sh')
+        // 4. Last resort: Any script (prefer shorter names like 'run' or 'start')
         var script = candidates
             .Where(c => c.IsScript)
-            .OrderBy(c => Path.GetFileName(c.Path).Length) // Shortest name often 'run'
+            .OrderBy(c => Path.GetFileName(c.Path).Length)
             .FirstOrDefault();
             
         return script.Path;
