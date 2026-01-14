@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using System.Windows.Input;
 
 namespace Unpacker.ViewModels;
 
@@ -33,4 +34,8 @@ public partial class MainWindowViewModel : ViewModelBase
     }
     
     public string AppVersion => "1.0.0"; // Placeholder for now
+    
+    // SelectIconCommand - will be bound from InstallActions
+    [ObservableProperty]
+    private ICommand? _selectIconCommand;
 }

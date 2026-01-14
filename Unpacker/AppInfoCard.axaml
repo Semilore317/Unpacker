@@ -1,16 +1,18 @@
 <UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="150"
-             x:Class="Unpacker.AppInfoCard"
-             x:Name="Root">
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+              xmlns:local="clr-namespace:Unpacker"
+              mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="150"
+              x:Class="Unpacker.AppInfoCard"
+              x:Name="Root"
+              x:DataType="local:AppInfoCard">
 
     <Border Classes="card" Padding="20">
         <Grid ColumnDefinitions="Auto, *" ColumnSpacing="20">
             
             <Button Grid.Column="0" 
-                    Command="{Binding #Root.SelectIconCommand}"
+                    Command="{Binding SelectIconCommand}"
                     Width="64" Height="64"
                     Padding="0"
                     Background="Transparent"

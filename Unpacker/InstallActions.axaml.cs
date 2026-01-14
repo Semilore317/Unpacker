@@ -134,6 +134,8 @@ public partial class InstallActions : UserControl
 
     private async void SelectIcon()
     {
+        Log("[DEBUG] SelectIcon() called - button clicked!");
+        
         if (IsExtracting)
         {
             Log("[WAIT] Please wait, archive is still being extracted...");
@@ -156,18 +158,55 @@ public partial class InstallActions : UserControl
         IStorageFolder? startLocation = null;
         if (!string.IsNullOrEmpty(_currentExtractedPath) && Directory.Exists(_currentExtractedPath))
         {
+            Log($"[DEBUG] Setting file picker start location to: {_currentExtractedPath}");
+            
             try 
             {
-                // Uri constructor handles absolute paths correctly (adds file:// automatically)
-                // e.g. /tmp/foo -> file:///tmp/foo
+                // Try Uri constructor first (most reliable)
                 startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(_currentExtractedPath));
+                if (startLocation != null)
+                {
+                    Log($"[DEBUG] Successfully set start location using URI");
+                }
             }
             catch (Exception ex)
             {
-                 Log($"Warning: Could not set start location (URI error): {ex.Message}");
-                 // Fallback: Try passing path string directly if the overload exists (it often handles it better)
-                 try { startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(_currentExtractedPath); } catch {}
+                 Log($"[DEBUG] URI method failed: {ex.Message}");
+                 // Fallback 1: Try passing path string directly
+                 try 
+                 { 
+                     startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(_currentExtractedPath); 
+                     if (startLocation != null)
+                     {
+                         Log($"[DEBUG] Successfully set start location using direct path");
+                     }
+                 } 
+                 catch (Exception ex2)
+                 {
+                     Log($"[DEBUG] Direct path method failed: {ex2.Message}");
+                     // Fallback 2: Try parent directory if current path doesn't exist
+                     try
+                     {
+                         string parentDir = Path.GetDirectoryName(_currentExtractedPath) ?? "";
+                         if (!string.IsNullOrEmpty(parentDir) && Directory.Exists(parentDir))
+                         {
+                             startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(parentDir);
+                             if (startLocation != null)
+                             {
+                                 Log($"[DEBUG] Successfully set start location to parent directory: {parentDir}");
+                             }
+                         }
+                     }
+                     catch (Exception ex3)
+                     {
+                         Log($"[WARNING] All start location methods failed, using default: {ex3.Message}");
+                     }
+                 }
             }
+        }
+        else
+        {
+            Log($"[DEBUG] No valid extracted path found, using default file picker location");
         }
 
         var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
