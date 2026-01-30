@@ -2,8 +2,6 @@
 
 > A cross-platform utility to install software from tarballs without the headache.
 
-## The Problem
-
 ## Features
 * **Automated Extraction:** Handles `.tar.gz` and `.tar.xz` archives automatically.
 * **Desktop Integration:** Automatically generates `.desktop` files so apps appear in your launcher.
@@ -15,4 +13,4 @@
 * **GUI Framework:** Avalonia UI
 * **OS Target:** Linux
 
-## Getting Started coming soon...
+## Releases coming soon...
