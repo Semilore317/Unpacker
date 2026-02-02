@@ -48,9 +48,4 @@ public partial class AppInfoCard : UserControl
         get => GetValue(SelectIconCommandProperty);
         set => SetValue(SelectIconCommandProperty, value);
     }
-    
-    // Events
-    
-    // event handler for updating archive path
-    //public void UpdateNamePath
 }

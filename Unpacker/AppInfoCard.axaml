@@ -12,7 +12,7 @@
         <Grid ColumnDefinitions="Auto, *" ColumnSpacing="20">
             
             <Button Grid.Column="0" 
-                    Command="{Binding SelectIconCommand}"
+                    Command="{Binding #Root.SelectIconCommand}"
                     Width="64" Height="64"
                     Padding="0"
                     Background="Transparent"

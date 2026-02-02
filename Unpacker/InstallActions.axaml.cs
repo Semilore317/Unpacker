@@ -92,8 +92,15 @@ public partial class InstallActions : UserControl
         set => SetValue(IsExtractingProperty, value);
     }
 
-    // Select Icon Command
-    public System.Windows.Input.ICommand SelectIconCommand { get; }
+    // Select Icon Command - must be StyledProperty for XAML binding to work
+    public static readonly StyledProperty<System.Windows.Input.ICommand?> SelectIconCommandProperty =
+        AvaloniaProperty.Register<InstallActions, System.Windows.Input.ICommand?>(nameof(SelectIconCommand));
+
+    public System.Windows.Input.ICommand? SelectIconCommand
+    {
+        get => GetValue(SelectIconCommandProperty);
+        set => SetValue(SelectIconCommandProperty, value);
+    }
 
     private async Task ProcessSourceArchive(string path)
     {
