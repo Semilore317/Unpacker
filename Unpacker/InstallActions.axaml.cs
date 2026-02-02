@@ -504,12 +504,12 @@ public partial class InstallActions : UserControl
             if (IsSystemWide)
             {
                 Log("Installing System-Wide (FPM)...");
-                await InstallSystemWideWithFpm(tempDir, binaryPath, appName, AppVersion, _selectedIconPath);
+                await InstallSystemWideWithFpm(tempDir, binaryPath, appName, AppName, AppVersion, _selectedIconPath);
             }
             else
             {
                 Log("Installing User-Local...");
-                await InstallUserLocal(tempDir, binaryPath, appName, _selectedIconPath);
+                await InstallUserLocal(tempDir, binaryPath, appName, AppName, _selectedIconPath);
             }
 
             Log("Installation completed successfully!");
@@ -535,7 +535,7 @@ public partial class InstallActions : UserControl
         }
     }
 
-    private async Task InstallSystemWideWithFpm(string sourceDir, string binaryPath, string appName, string version, string? iconPath)
+    private async Task InstallSystemWideWithFpm(string sourceDir, string binaryPath, string appName, string displayName, string version, string? iconPath)
     {
         Log("Checking prerequisites...");
         if (!IsCommandAvailable("fpm"))
@@ -595,7 +595,7 @@ public partial class InstallActions : UserControl
              finalIconPath = Path.Combine(installPrefix, $"icon{iconExt}");
         }
 
-        await CreateDesktopFile(Path.Combine(stagingDesktopDir, $"{appName}.desktop"), appName, $"/usr/bin/{appName}", finalIconPath);
+        await CreateDesktopFile(Path.Combine(stagingDesktopDir, $"{appName}.desktop"), displayName, $"/usr/bin/{appName}", finalIconPath);
 
         // Build Package with FPM
         string outputDir = sourceDir;
@@ -682,7 +682,7 @@ public partial class InstallActions : UserControl
         Log("Package installed successfully via system package manager.");
     }
 
-    private async Task InstallUserLocal(string sourceDir, string binaryPath, string appName, string? iconPath)
+    private async Task InstallUserLocal(string sourceDir, string binaryPath, string appName, string displayName, string? iconPath)
     {
         string targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), appName); 
         string binDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
@@ -721,7 +721,7 @@ public partial class InstallActions : UserControl
         // Desktop File
         sb.AppendLine($"cat > \"{desktopDir}/{appName}.desktop\" <<EOL");
         sb.AppendLine("[Desktop Entry]");
-        sb.AppendLine($"Name={appName}");
+        sb.AppendLine($"Name={displayName}");
         sb.AppendLine($"Exec={binDir}/{appName}");
         if (!string.IsNullOrEmpty(iconLine)) sb.AppendLine(iconLine);
         sb.AppendLine("Type=Application");
@@ -877,11 +877,11 @@ public partial class InstallActions : UserControl
         }
     }
 
-    private Task CreateDesktopFile(string path, string appName, string execPath, string iconName = "")
+    private Task CreateDesktopFile(string path, string displayName, string execPath, string iconName = "")
     {
         var sb = new StringBuilder();
         sb.AppendLine("[Desktop Entry]");
-        sb.AppendLine($"Name={appName}");
+        sb.AppendLine($"Name={displayName}");
         sb.AppendLine($"Exec={execPath}");
         if (!string.IsNullOrEmpty(iconName))
         {
