@@ -61,12 +61,65 @@ public partial class InstallActions : UserControl
         set 
         {
             SetValue(SourcePathProperty, value);
-            if (!string.IsNullOrEmpty(value) && File.Exists(value))
+            
+            // Validate format and update UI
+            if (!string.IsNullOrEmpty(value))
             {
-                // Fire and forget - analyze/extract in background
-                _ = ProcessSourceArchive(value);
+                if (!IsSupportedArchive(value))
+                {
+                    HasFormatError = true;
+                    FormatErrorMessage = "Unsupported format. Only tar archives are supported: .tar.gz, .tar.xz, .tar.bz2, .tgz, .tar";
+                    CanInstall = false;
+                    return;
+                }
+                
+                HasFormatError = false;
+                FormatErrorMessage = "";
+                CanInstall = File.Exists(value);
+                
+                if (File.Exists(value))
+                {
+                    // Fire and forget - analyze/extract in background
+                    _ = ProcessSourceArchive(value);
+                }
+            }
+            else
+            {
+                HasFormatError = false;
+                FormatErrorMessage = "";
+                CanInstall = false;
             }
         }
+    }
+
+    // Format Error Message
+    public static readonly StyledProperty<string> FormatErrorMessageProperty =
+        AvaloniaProperty.Register<InstallActions, string>(nameof(FormatErrorMessage), "");
+
+    public string FormatErrorMessage
+    {
+        get => GetValue(FormatErrorMessageProperty);
+        set => SetValue(FormatErrorMessageProperty, value);
+    }
+
+    // Has Format Error
+    public static readonly StyledProperty<bool> HasFormatErrorProperty =
+        AvaloniaProperty.Register<InstallActions, bool>(nameof(HasFormatError), false);
+
+    public bool HasFormatError
+    {
+        get => GetValue(HasFormatErrorProperty);
+        set => SetValue(HasFormatErrorProperty, value);
+    }
+
+    // Can Install (validation state)
+    public static readonly StyledProperty<bool> CanInstallProperty =
+        AvaloniaProperty.Register<InstallActions, bool>(nameof(CanInstall), false);
+
+    public bool CanInstall
+    {
+        get => GetValue(CanInstallProperty);
+        set => SetValue(CanInstallProperty, value);
     }
 
     private string? _currentExtractedPath;
@@ -105,6 +158,16 @@ public partial class InstallActions : UserControl
     private async Task ProcessSourceArchive(string path)
     {
         if (IsExtracting) return; // Prevent double trigger if logic allows (though setter is fine)
+        
+        // Validate archive format
+        if (!IsSupportedArchive(path))
+        {
+            Log($"ERROR: Unsupported archive format.");
+            Log("Only tar archives are supported: .tar.gz, .tar.xz, .tar.bz2, .tgz, .tar");
+            Log("FPM requires tar-based archives for proper Linux package creation.");
+            return;
+        }
+        
         IsExtracting = true;
         
         try 
@@ -367,15 +430,14 @@ public partial class InstallActions : UserControl
 
         var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Select Archive to Install",
+            Title = "Select Tar Archive to Install",
             AllowMultiple = false,
             FileTypeFilter = new[]
             {
-                new FilePickerFileType("Archive Files")
+                new FilePickerFileType("Tar Archives")
                 {
-                    Patterns = new[] { "*.tar.gz", "*.zip", "*.tar.xz", "*.tar", "*.7z", "*.rar" }
-                },
-                FilePickerFileTypes.All
+                    Patterns = new[] { "*.tar.gz", "*.tar.xz", "*.tar.bz2", "*.tgz", "*.tar" }
+                }
             }
         });
 
@@ -682,16 +744,24 @@ public partial class InstallActions : UserControl
         return string.IsNullOrEmpty(safe) ? "unpacked-app" : safe.ToLowerInvariant();
     }
 
+    private static readonly string[] SupportedExtensions = 
+        { ".tar.gz", ".tar.xz", ".tar.bz2", ".tgz", ".tar" };
+
     private string StripArchiveExtensions(string fileName)
     {
         // Handle multi-part extensions like .tar.gz, .tar.xz
-        string[] extensions = { ".tar.gz", ".tar.xz", ".tar.bz2", ".tgz", ".tar", ".zip", ".7z", ".rar" };
-        foreach (var ext in extensions)
+        foreach (var ext in SupportedExtensions)
         {
             if (fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
                 return fileName[..^ext.Length];
         }
         return Path.GetFileNameWithoutExtension(fileName);
+    }
+
+    private bool IsSupportedArchive(string path)
+    {
+        string lower = path.ToLowerInvariant();
+        return SupportedExtensions.Any(ext => lower.EndsWith(ext));
     }
 
     private string? GetSystemPackageType()
@@ -824,28 +894,30 @@ public partial class InstallActions : UserControl
         return File.WriteAllTextAsync(path, sb.ToString());
     }
     
-    private Task ExtractArchive(string archivePath, string destDir)
+    private async Task ExtractArchive(string archivePath, string destDir)
     {
-        return Task.Run(() =>
+        await Task.Run(async () =>
         {
-            if (archivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            var psi = new ProcessStartInfo
             {
-                ZipFile.ExtractToDirectory(archivePath, destDir);
-            }
-            else
+                FileName = "tar",
+                Arguments = $"-xf \"{archivePath}\" -C \"{destDir}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            
+            var p = Process.Start(psi);
+            if (p == null) throw new Exception("Failed to start tar process.");
+            
+            // Capture stderr for better error messages
+            string stderr = await p.StandardError.ReadToEndAsync();
+            await p.WaitForExitAsync();
+            
+            if (p.ExitCode != 0)
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "tar",
-                    Arguments = $"-xf \"{archivePath}\" -C \"{destDir}\"",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                var p = Process.Start(psi);
-                p?.WaitForExit();
-                if (p?.ExitCode != 0) throw new Exception("Tar extraction failed.");
+                throw new Exception($"Tar extraction failed: {stderr}");
             }
         });
     }
