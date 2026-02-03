@@ -3,7 +3,7 @@ APP_NAME="Unpacker"
 VERSION="1.0.0"
 DESCRIPTION="A lightweight Linux Utility to simplify installation from archives."
 MAINTAINER="Abraham Bankole <abraham.o.bankole@gmail.com>"
-URL="[https://github.com/semilore317/unpacker](https://github.com/semilore317/unpackr)"
+URL="[https://github.com/semilore317/Unpacker](https://github.com/semilore317/Unpacker)"
 
 # Input Directory (Where dotnet published to)
 INPUT_DIR="./dist/linux-x64"
