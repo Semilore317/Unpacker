@@ -42,7 +42,14 @@ public partial class InstallActions : UserControl
     }
     
     // COMMANDS
-    public System.Windows.Input.ICommand ResetViewCommand { get; }
+    public static readonly StyledProperty<System.Windows.Input.ICommand?> ResetViewCommandProperty =
+        AvaloniaProperty.Register<InstallActions, System.Windows.Input.ICommand?>(nameof(ResetViewCommand));
+
+    public System.Windows.Input.ICommand? ResetViewCommand
+    {
+        get => GetValue(ResetViewCommandProperty);
+        set => SetValue(ResetViewCommandProperty, value);
+    }
 
     private void ResetView()
     {
