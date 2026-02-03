@@ -51,6 +51,21 @@
                                FontSize="12"
                                IsVisible="{Binding HasFormatError}"
                                Margin="0,4,0,0"/>
+                    
+                    <!-- Extraction progress indicator -->
+                    <StackPanel Orientation="Horizontal" 
+                                Spacing="10" 
+                                Margin="0,8,0,0"
+                                IsVisible="{Binding IsExtracting}">
+                        <ProgressBar IsIndeterminate="True" 
+                                     Width="200" 
+                                     Height="6"
+                                     VerticalAlignment="Center"/>
+                        <TextBlock Text="Extracting archive..." 
+                                   Foreground="#888" 
+                                   FontSize="12"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
                 </StackPanel>
 
                 <local:AppInfoCard AppName="{Binding AppName, Mode=TwoWay}" 
