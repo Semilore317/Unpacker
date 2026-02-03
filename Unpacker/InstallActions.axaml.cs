@@ -603,6 +603,9 @@ public partial class InstallActions : UserControl
         
         Log($"Building {packageType} package with FPM...");
         
+        // Detect dependencies from the binary
+        var dependencies = await DetectDependencies(binaryPath, packageType);
+        
         // FPM arguments with metadata
         var fpmArgsList = new List<string>
         {
@@ -613,11 +616,18 @@ public partial class InstallActions : UserControl
             "--description", $"{displayName} - installed via Unpacker",
             "--maintainer", "Unpacker <unpacker@local>",
             "--license", "Unknown",
-            "--url", "https://github.com/semilore317/Unpacker",
-            "-C", stagingDir,
-            "-p", outputDir,
-            "."
+            "--url", "https://github.com/semilore317/Unpacker"
         };
+        
+        // Add dependencies
+        foreach (var dep in dependencies)
+        {
+            fpmArgsList.Add("--depends");
+            fpmArgsList.Add(dep);
+        }
+        
+        // Add source and output
+        fpmArgsList.AddRange(new[] { "-C", stagingDir, "-p", outputDir, "." });
         
         // Join args with proper escaping for shell
         var fpmArgs = string.Join(" ", fpmArgsList.Select(arg => 
@@ -786,6 +796,178 @@ public partial class InstallActions : UserControl
         if (IsCommandAvailable("apt-get")) return "deb";
         if (IsCommandAvailable("dnf") || IsCommandAvailable("rpm")) return "rpm";
         return null;
+    }
+
+    /// <summary>
+    /// Detects library dependencies using ldd and queries package manager for owning packages
+    /// </summary>
+    private async Task<List<string>> DetectDependencies(string binaryPath, string packageType)
+    {
+        var dependencies = new HashSet<string>();
+        
+        try
+        {
+            Log("Detecting dependencies with ldd...");
+            
+            var psi = new ProcessStartInfo
+            {
+                FileName = "ldd",
+                Arguments = $"\"{binaryPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            
+            var p = Process.Start(psi);
+            if (p == null) return dependencies.ToList();
+            
+            string output = await p.StandardOutput.ReadToEndAsync();
+            await p.WaitForExitAsync();
+            
+            if (p.ExitCode != 0) return dependencies.ToList();
+            
+            // Parse ldd output - each line is like:
+            // libfoo.so.1 => /usr/lib/libfoo.so.1 (0x...)
+            var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var libraryPaths = new List<string>();
+            
+            foreach (var line in lines)
+            {
+                var trimmed = line.Trim();
+                if (string.IsNullOrEmpty(trimmed) || 
+                    trimmed.Contains("not found") || 
+                    trimmed.StartsWith("linux-vdso") ||
+                    trimmed.StartsWith("linux-gate"))
+                    continue;
+                
+                // Extract the library path (after "=>")
+                var parts = trimmed.Split("=>", StringSplitOptions.TrimEntries);
+                if (parts.Length >= 2)
+                {
+                    // Get path before the memory address
+                    var pathPart = parts[1].Split('(')[0].Trim();
+                    if (!string.IsNullOrEmpty(pathPart) && pathPart.StartsWith("/"))
+                    {
+                        libraryPaths.Add(pathPart);
+                    }
+                }
+            }
+            
+            Log($"Found {libraryPaths.Count} library paths, querying package manager...");
+            
+            // Query package manager for each library
+            foreach (var libPath in libraryPaths)
+            {
+                string? packageName = await QueryPackageOwner(libPath, packageType);
+                if (packageName != null)
+                {
+                    dependencies.Add(packageName);
+                }
+            }
+            
+            Log($"Detected {dependencies.Count} dependencies: {string.Join(", ", dependencies.Take(5))}{(dependencies.Count > 5 ? "..." : "")}");
+        }
+        catch (Exception ex)
+        {
+            Log($"Warning: Dependency detection failed: {ex.Message}");
+        }
+        
+        return dependencies.ToList();
+    }
+
+    /// <summary>
+    /// Queries the package manager to find which package owns a library file
+    /// </summary>
+    private async Task<string?> QueryPackageOwner(string libraryPath, string packageType)
+    {
+        try
+        {
+            string command;
+            string args;
+            
+            switch (packageType)
+            {
+                case "deb":
+                    command = "dpkg";
+                    args = $"-S \"{libraryPath}\"";
+                    break;
+                case "rpm":
+                    command = "rpm";
+                    args = $"-qf \"{libraryPath}\"";
+                    break;
+                case "pacman":
+                    command = "pacman";
+                    args = $"-Qo \"{libraryPath}\"";
+                    break;
+                default:
+                    return null;
+            }
+            
+            var psi = new ProcessStartInfo
+            {
+                FileName = command,
+                Arguments = args,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            
+            var p = Process.Start(psi);
+            if (p == null) return null;
+            
+            string output = await p.StandardOutput.ReadToEndAsync();
+            await p.WaitForExitAsync();
+            
+            if (p.ExitCode != 0) return null;
+            
+            // Parse output based on package manager format
+            return packageType switch
+            {
+                // dpkg -S output: "packagename:arch: /path/to/lib" or "packagename: /path/to/lib"
+                "deb" => output.Split(':')[0].Trim(),
+                
+                // rpm -qf output: "packagename-version-release.arch"
+                // Extract just the package name (before version)
+                "rpm" => ExtractRpmPackageName(output.Trim()),
+                
+                // pacman -Qo output: "/path/to/lib is owned by packagename version"
+                "pacman" => output.Split(" is owned by ").LastOrDefault()?.Split(' ').FirstOrDefault()?.Trim(),
+                
+                _ => null
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Extracts the package name from RPM full package string (name-version-release.arch)
+    /// </summary>
+    private string? ExtractRpmPackageName(string fullName)
+    {
+        if (string.IsNullOrEmpty(fullName)) return null;
+        
+        // RPM format: name-version-release.arch
+        // We need to find the name part (everything before the version)
+        // Version typically starts with a digit after a hyphen
+        var parts = fullName.Split('-');
+        var nameParts = new List<string>();
+        
+        for (int i = 0; i < parts.Length; i++)
+        {
+            // If this part starts with a digit and we have at least one part, this is likely the version
+            if (i > 0 && parts[i].Length > 0 && char.IsDigit(parts[i][0]))
+            {
+                break;
+            }
+            nameParts.Add(parts[i]);
+        }
+        
+        return nameParts.Count > 0 ? string.Join("-", nameParts) : null;
     }
 
     private bool IsCommandAvailable(string command)
