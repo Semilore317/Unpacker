@@ -599,13 +599,29 @@ public partial class InstallActions : UserControl
 
         // Build Package with FPM
         string outputDir = sourceDir;
-        // Version is passed in now
         Log($"Using version: {version}");
         
         Log($"Building {packageType} package with FPM...");
         
-        // FPM arguments
-        var fpmArgs = $"-s dir -t {packageType} -n \"{appName}\" -v {version} -C \"{stagingDir}\" -p \"{outputDir}\" .";
+        // FPM arguments with metadata
+        var fpmArgsList = new List<string>
+        {
+            "-s", "dir",
+            "-t", packageType,
+            "-n", appName,
+            "-v", version,
+            "--description", $"{displayName} - installed via Unpacker",
+            "--maintainer", "Unpacker <unpacker@local>",
+            "--license", "Unknown",
+            "--url", "https://github.com/semilore317/Unpacker",
+            "-C", stagingDir,
+            "-p", outputDir,
+            "."
+        };
+        
+        // Join args with proper escaping for shell
+        var fpmArgs = string.Join(" ", fpmArgsList.Select(arg => 
+            arg.Contains(' ') || arg.Contains('\"') ? $"\"{arg.Replace("\"", "\\\"")}\"" : arg));
         
         await RunCommand("fpm", fpmArgs);
 
