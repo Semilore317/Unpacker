@@ -37,6 +37,7 @@ public class RelayCommand : System.Windows.Input.ICommand
 public partial class InstallActions : UserControl
 {
     private readonly ProcessRunner _processRunner = new();
+    private readonly ArchiveInspector _archiveInspector = new();
     private readonly ElfDependencyInspector _elfDependencyInspector;
 
     public InstallActions()
@@ -691,24 +692,27 @@ public partial class InstallActions : UserControl
             // 2. Detect Binary
             Log("Detecting binary...");
 
+            string appName =
+                SanitizeAppName(AppName);
+
             string? binaryPath =
-                DetectExecutable(tempDir);
+                _archiveInspector.DetectExecutable(
+                    tempDir,
+                    appName
+                );
 
             if (binaryPath == null)
             {
                 Log(
-                    "Error: No binary (ELF) found in the archive."
+                    "Error: No executable found in the archive."
                 );
 
                 InstallButtonText =
-                    "Error: No Binary Found";
+                    "Error: No Executable Found";
 
                 IsInstallationDone = true; // Allow user to go back
                 return;
             }
-
-            string appName =
-                SanitizeAppName(AppName);
 
             Log(
                 $"Detected binary: " +
@@ -1513,7 +1517,7 @@ public partial class InstallActions : UserControl
     {
         var dependencies = new HashSet<string>();
 
-        if (!IsElf(binaryPath))
+        if (!_archiveInspector.IsElf(binaryPath))
         {
             Log(
                 "Skipping ELF dependency inspection for non-ELF binary."
@@ -1844,251 +1848,5 @@ public partial class InstallActions : UserControl
                 destDir
             }
         );
-    }
-
-    private string? DetectExecutable(string dir)
-    {
-        var files =
-            Directory.GetFiles(
-                dir,
-                "*",
-                SearchOption.AllDirectories
-            );
-
-        Log(
-            $"Scanning {files.Length} files for executables..."
-        );
-
-        var candidates =
-            new List<(
-                string Path,
-                bool IsElf,
-                bool IsScript
-            )>();
-
-        foreach (var file in files)
-        {
-            if (new FileInfo(file).Length == 0)
-            {
-                continue;
-            }
-
-            bool isElf = IsElf(file);
-            bool isScript =
-                !isElf && IsShellScript(file);
-
-            if (isElf || isScript)
-            {
-                candidates.Add(
-                    (
-                        file,
-                        isElf,
-                        isScript
-                    )
-                );
-            }
-        }
-
-        if (candidates.Count == 0)
-        {
-            Log(
-                "Debug info: No candidates found. " +
-                "Listing all files:"
-            );
-
-            foreach (var f in files.Take(20))
-            {
-                Log(
-                    $" - {Path.GetFileName(f)}"
-                );
-            }
-
-            if (files.Length > 20)
-            {
-                Log(
-                    $" ... and {files.Length - 20} more."
-                );
-            }
-
-            return null;
-        }
-
-        // Strategy for tarball installations:
-        // 1. Prefer ELF binary matching the app name
-        // 2. Fallback to largest ELF (usually the main application binary)
-        // 3. Only use scripts as last resort
-
-        // Use StripArchiveExtensions to properly handle .tar.gz, .tar.xz, etc.
-        var appName =
-            SanitizeAppName(
-                StripArchiveExtensions(
-                    Path.GetFileName(SourcePath)
-                )
-            );
-
-        // Debug: Show candidate breakdown
-        int elfCount =
-            candidates.Count(c => c.IsElf);
-
-        int scriptCount =
-            candidates.Count(c => c.IsScript);
-
-        Log(
-            $"Found {elfCount} ELF binaries and " +
-            $"{scriptCount} scripts"
-        );
-
-        if (elfCount > 0)
-        {
-            Log(
-                $"ELF candidates: " +
-                $"{string.Join(
-                    ", ",
-                    candidates
-                        .Where(c => c.IsElf)
-                        .Take(5)
-                        .Select(
-                            c =>
-                                Path.GetFileName(
-                                    c.Path
-                                )
-                        )
-                )}"
-            );
-        }
-
-        Log(
-            $"Filtering candidates for app name: " +
-            $"{appName}"
-        );
-
-        // 2. Name Match - ONLY for ELF binaries (scripts like bump.sh should not match)
-        // Strip non-letters for fuzzy comparison
-        var simpleAppName =
-            new string(
-                appName
-                    .Where(char.IsLetter)
-                    .ToArray()
-            )
-            .ToLowerInvariant();
-
-        var nameMatch =
-            candidates
-                .Where(c => c.IsElf)
-                .Where(c =>
-                {
-                    var simpleName =
-                        new string(
-                            Path
-                                .GetFileNameWithoutExtension(
-                                    c.Path
-                                )
-                                .Where(char.IsLetter)
-                                .ToArray()
-                        )
-                        .ToLowerInvariant();
-
-                    return
-                        simpleName.Contains(
-                            simpleAppName
-                        ) ||
-                        simpleAppName.Contains(
-                            simpleName
-                        );
-                })
-                .OrderBy(
-                    c =>
-                        Path.GetFileName(
-                            c.Path
-                        ).Length
-                )
-                .FirstOrDefault();
-
-        if (nameMatch.Path != null)
-        {
-            return nameMatch.Path;
-        }
-
-        // 3. Fallback: Largest ELF (usually the main binary for Electron apps, etc.)
-        var largestElf =
-            candidates
-                .Where(c => c.IsElf)
-                .OrderByDescending(
-                    c =>
-                        new FileInfo(
-                            c.Path
-                        ).Length
-                )
-                .FirstOrDefault();
-
-        if (largestElf.Path != null)
-        {
-            return largestElf.Path;
-        }
-
-        // 4. Last resort: Any script (prefer shorter names like 'run' or 'start')
-        var script =
-            candidates
-                .Where(c => c.IsScript)
-                .OrderBy(
-                    c =>
-                        Path.GetFileName(
-                            c.Path
-                        ).Length
-                )
-                .FirstOrDefault();
-
-        return script.Path;
-    }
-
-    private bool IsElf(string path)
-    {
-        try
-        {
-            using var fs =
-                File.OpenRead(path);
-
-            var buffer = new byte[4];
-
-            if (fs.Read(buffer, 0, 4) < 4)
-            {
-                return false;
-            }
-
-            return
-                buffer[0] == 0x7F &&
-                buffer[1] == 0x45 &&
-                buffer[2] == 0x4C &&
-                buffer[3] == 0x46;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private bool IsShellScript(string path)
-    {
-        try
-        {
-            // Check for Shebang #!
-            using var fs =
-                File.OpenRead(path);
-
-            var buffer = new byte[2];
-
-            if (fs.Read(buffer, 0, 2) < 2)
-            {
-                return false;
-            }
-
-            return
-                buffer[0] == '#' &&
-                buffer[1] == '!';
-        }
-        catch
-        {
-            return false;
-        }
     }
 }
