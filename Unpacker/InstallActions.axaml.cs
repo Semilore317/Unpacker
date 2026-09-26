@@ -798,13 +798,16 @@ public partial class InstallActions : UserControl
     {
         Log("Checking prerequisites...");
 
+        if (!await IsCommandAvailable("pkexec"))
+            throw new Exception(
+                "pkexec is not available. Install the 'pkexec' package to use system-wide installation"
+            );
+
         if (!await IsCommandAvailable("fpm"))
-        {
             throw new Exception(
                 "FPM is not installed. Please install " +
                 "'ruby-dev' and 'gem install fpm'."
             );
-        }
 
         string? packageType =
             await GetSystemPackageType();
@@ -1149,12 +1152,11 @@ public partial class InstallActions : UserControl
         var policyKitArguments =
             new List<string>
             {
+                "--disable-internal-agent",
                 packageManager
             };
 
-        policyKitArguments.AddRange(
-            packageArguments
-        );
+        policyKitArguments.AddRange(packageArguments);
 
         Log("Requesting admin permissions...");
         Log(
