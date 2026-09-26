@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -38,9 +37,12 @@ public class RelayCommand : System.Windows.Input.ICommand
 public partial class InstallActions : UserControl
 {
     private readonly ProcessRunner _processRunner = new();
+    private readonly ElfDependencyInspector _elfDependencyInspector;
 
     public InstallActions()
     {
+        _elfDependencyInspector = new ElfDependencyInspector(_processRunner);
+
         InitializeComponent();
         DataContext = this;
         ResetViewCommand = new RelayCommand(ResetView);
@@ -1500,7 +1502,8 @@ public partial class InstallActions : UserControl
     }
 
     /// <summary>
-    /// Detects library dependencies using ldd and queries package manager for owning packages
+    /// statically inspects the binaries and queries the package manager
+    /// for the packages that own the resolved libraries
     /// </summary>
     private async Task<List<string>>
         DetectDependencies(
@@ -1508,92 +1511,21 @@ public partial class InstallActions : UserControl
             string packageType
         )
     {
-        var dependencies =
-            new HashSet<string>();
+        var dependencies = new HashSet<string>();
+
+        if (!IsElf(binaryPath))
+        {
+            Log(
+                "Skipping ELF dependency inspection for non-ELF binary."
+            );
+            return dependencies.ToList();
+        }
 
         try
         {
-            Log(
-                "Detecting dependencies with ldd..."
-            );
+            Log(message: "Inspecting ELF dependencies statically...");
 
-            var psi = new ProcessStartInfo
-            {
-                FileName = "ldd",
-                Arguments = $"\"{binaryPath}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            var p = Process.Start(psi);
-
-            if (p == null)
-            {
-                return dependencies.ToList();
-            }
-
-            string output =
-                await p.StandardOutput
-                    .ReadToEndAsync();
-
-            await p.WaitForExitAsync();
-
-            if (p.ExitCode != 0)
-            {
-                return dependencies.ToList();
-            }
-
-            // Parse ldd output - each line is like:
-            // libfoo.so.1 => /usr/lib/libfoo.so.1 (0x...)
-            var lines =
-                output.Split(
-                    '\n',
-                    StringSplitOptions.RemoveEmptyEntries
-                );
-
-            var libraryPaths =
-                new List<string>();
-
-            foreach (var line in lines)
-            {
-                var trimmed = line.Trim();
-
-                if (
-                    string.IsNullOrEmpty(trimmed) ||
-                    trimmed.Contains("not found") ||
-                    trimmed.StartsWith("linux-vdso") ||
-                    trimmed.StartsWith("linux-gate")
-                )
-                {
-                    continue;
-                }
-
-                // Extract the library path (after "=>")
-                var parts =
-                    trimmed.Split(
-                        "=>",
-                        StringSplitOptions.TrimEntries
-                    );
-
-                if (parts.Length >= 2)
-                {
-                    // Get path before the memory address
-                    var pathPart =
-                        parts[1]
-                            .Split('(')[0]
-                            .Trim();
-
-                    if (
-                        !string.IsNullOrEmpty(pathPart) &&
-                        pathPart.StartsWith("/")
-                    )
-                    {
-                        libraryPaths.Add(pathPart);
-                    }
-                }
-            }
+            var libraryPaths = await _elfDependencyInspector.InspectAsync(binaryPath);
 
             Log(
                 $"Found {libraryPaths.Count} library paths, " +
@@ -1642,65 +1574,76 @@ public partial class InstallActions : UserControl
     {
         try
         {
+            string canonicalPath =
+                await ResolveCanonicalPath(
+                    libraryPath
+                );
+    
             string command;
             string[] arguments;
-
+    
             switch (packageType)
             {
                 case "deb":
                     command = "dpkg";
                     arguments =
-                        new[] { "-S", libraryPath };
+                        new[]
+                        {
+                            "-S",
+                            canonicalPath
+                        };
                     break;
-
+    
                 case "pacman":
                     command = "pacman";
                     arguments =
-                        new[] { "-Qo", libraryPath };
+                        new[]
+                        {
+                            "-Qo",
+                            canonicalPath
+                        };
                     break;
-
+    
                 case "rpm":
                     command = "rpm";
                     arguments =
-                        new[] { "-qf", libraryPath };
+                        new[]
+                        {
+                            "-qf",
+                            canonicalPath
+                        };
                     break;
-
+    
                 default:
                     return null;
             }
-
+    
             var result =
                 await _processRunner.RunAsync(
                     command,
                     arguments
                 );
-
+    
             if (result.ExitCode != 0)
             {
                 return null;
             }
-
+    
             string output =
                 result.StandardOutput;
-
+    
             return packageType switch
             {
-                // dpkg -S
-                // package-name:architecture:
                 "deb" =>
                     output
                         .Split(':')[0]
                         .Trim(),
-
-                // rpm -qf:
-                // package-name-version-release.arch
+    
                 "rpm" =>
                     ExtractRpmPackageName(
                         output.Trim()
                     ),
-
-                // pacman -Qo:
-                // /path/to/library is owned by package-name version
+    
                 "pacman" =>
                     output
                         .Split(" is owned by ")
@@ -1708,7 +1651,7 @@ public partial class InstallActions : UserControl
                         .Split(' ')
                         .FirstOrDefault()?
                         .Trim(),
-
+    
                 _ => null
             };
         }
@@ -1716,6 +1659,40 @@ public partial class InstallActions : UserControl
         {
             return null;
         }
+    }
+    private async Task<string> ResolveCanonicalPath(
+        string path
+    )
+    {
+        try
+        {
+            var result =
+                await _processRunner.RunAsync(
+                    "readlink",
+                    new[]
+                    {
+                        "-f",
+                        path
+                    }
+                );
+
+            string resolvedPath =
+                result.StandardOutput.Trim();
+
+            if (
+                result.ExitCode == 0 &&
+                !string.IsNullOrEmpty(resolvedPath)
+            )
+            {
+                return resolvedPath;
+            }
+        }
+        catch
+        {
+            // Fall back to the original path.
+        }
+
+        return path;
     }
 
     /// <summary>
