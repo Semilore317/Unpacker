@@ -11,6 +11,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Unpacker.Services;
 
 namespace Unpacker;
 
@@ -26,13 +27,18 @@ public class RelayCommand : System.Windows.Input.ICommand
         _canExecute = canExecute;
     }
 
-    public bool CanExecute(object parameter) => _canExecute == null || _canExecute();
+    public bool CanExecute(object parameter) =>
+        _canExecute == null || _canExecute();
+
     public void Execute(object parameter) => _execute();
+
     public event EventHandler CanExecuteChanged;
 }
 
 public partial class InstallActions : UserControl
 {
+    private readonly ProcessRunner _processRunner = new();
+
     public InstallActions()
     {
         InitializeComponent();
@@ -40,10 +46,14 @@ public partial class InstallActions : UserControl
         ResetViewCommand = new RelayCommand(ResetView);
         SelectIconCommand = new RelayCommand(SelectIcon);
     }
-    
+
     // COMMANDS
-    public static readonly StyledProperty<System.Windows.Input.ICommand?> ResetViewCommandProperty =
-        AvaloniaProperty.Register<InstallActions, System.Windows.Input.ICommand?>(nameof(ResetViewCommand));
+    public static readonly StyledProperty<System.Windows.Input.ICommand?>
+        ResetViewCommandProperty =
+            AvaloniaProperty.Register<
+                InstallActions,
+                System.Windows.Input.ICommand?
+            >(nameof(ResetViewCommand));
 
     public System.Windows.Input.ICommand? ResetViewCommand
     {
@@ -57,33 +67,38 @@ public partial class InstallActions : UserControl
         IsInstallationDone = false;
         InstallationLogs = "";
     }
-    
+
     // Source Path
     public static readonly StyledProperty<string> SourcePathProperty =
-        AvaloniaProperty.Register<InstallActions, string>(nameof(SourcePath), "");
+        AvaloniaProperty.Register<InstallActions, string>(
+            nameof(SourcePath),
+            ""
+        );
 
     public string SourcePath
     {
         get => GetValue(SourcePathProperty);
-        set 
+        set
         {
             SetValue(SourcePathProperty, value);
-            
+
             // Validate format and update UI
             if (!string.IsNullOrEmpty(value))
             {
                 if (!IsSupportedArchive(value))
                 {
                     HasFormatError = true;
-                    FormatErrorMessage = "Unsupported format. Only tar archives are supported: .tar.gz, .tar.xz, .tar.bz2, .tgz, .tar";
+                    FormatErrorMessage =
+                        "Unsupported format. Only tar archives are supported: " +
+                        ".tar.gz, .tar.xz, .tar.bz2, .tgz, .tar";
                     CanInstall = false;
                     return;
                 }
-                
+
                 HasFormatError = false;
                 FormatErrorMessage = "";
                 CanInstall = File.Exists(value);
-                
+
                 if (File.Exists(value))
                 {
                     // Fire and forget - analyze/extract in background
@@ -100,8 +115,12 @@ public partial class InstallActions : UserControl
     }
 
     // Format Error Message
-    public static readonly StyledProperty<string> FormatErrorMessageProperty =
-        AvaloniaProperty.Register<InstallActions, string>(nameof(FormatErrorMessage), "");
+    public static readonly StyledProperty<string>
+        FormatErrorMessageProperty =
+            AvaloniaProperty.Register<InstallActions, string>(
+                nameof(FormatErrorMessage),
+                ""
+            );
 
     public string FormatErrorMessage
     {
@@ -111,7 +130,10 @@ public partial class InstallActions : UserControl
 
     // Has Format Error
     public static readonly StyledProperty<bool> HasFormatErrorProperty =
-        AvaloniaProperty.Register<InstallActions, bool>(nameof(HasFormatError), false);
+        AvaloniaProperty.Register<InstallActions, bool>(
+            nameof(HasFormatError),
+            false
+        );
 
     public bool HasFormatError
     {
@@ -121,7 +143,10 @@ public partial class InstallActions : UserControl
 
     // Can Install (validation state)
     public static readonly StyledProperty<bool> CanInstallProperty =
-        AvaloniaProperty.Register<InstallActions, bool>(nameof(CanInstall), false);
+        AvaloniaProperty.Register<InstallActions, bool>(
+            nameof(CanInstall),
+            false
+        );
 
     public bool CanInstall
     {
@@ -133,8 +158,12 @@ public partial class InstallActions : UserControl
     private string? _selectedIconPath;
 
     // App Icon Bitmap
-    public static readonly StyledProperty<Avalonia.Media.Imaging.Bitmap?> AppIconBitmapProperty =
-        AvaloniaProperty.Register<InstallActions, Avalonia.Media.Imaging.Bitmap?>(nameof(AppIconBitmap));
+    public static readonly StyledProperty<Avalonia.Media.Imaging.Bitmap?>
+        AppIconBitmapProperty =
+            AvaloniaProperty.Register<
+                InstallActions,
+                Avalonia.Media.Imaging.Bitmap?
+            >(nameof(AppIconBitmap));
 
     public Avalonia.Media.Imaging.Bitmap? AppIconBitmap
     {
@@ -144,7 +173,10 @@ public partial class InstallActions : UserControl
 
     // Is Extracting (Status)
     public static readonly StyledProperty<bool> IsExtractingProperty =
-        AvaloniaProperty.Register<InstallActions, bool>(nameof(IsExtracting), false);
+        AvaloniaProperty.Register<InstallActions, bool>(
+            nameof(IsExtracting),
+            false
+        );
 
     public bool IsExtracting
     {
@@ -153,8 +185,12 @@ public partial class InstallActions : UserControl
     }
 
     // Select Icon Command - must be StyledProperty for XAML binding to work
-    public static readonly StyledProperty<System.Windows.Input.ICommand?> SelectIconCommandProperty =
-        AvaloniaProperty.Register<InstallActions, System.Windows.Input.ICommand?>(nameof(SelectIconCommand));
+    public static readonly StyledProperty<System.Windows.Input.ICommand?>
+        SelectIconCommandProperty =
+            AvaloniaProperty.Register<
+                InstallActions,
+                System.Windows.Input.ICommand?
+            >(nameof(SelectIconCommand));
 
     public System.Windows.Input.ICommand? SelectIconCommand
     {
@@ -164,25 +200,33 @@ public partial class InstallActions : UserControl
 
     private async Task ProcessSourceArchive(string path)
     {
-        if (IsExtracting) return; // Prevent double trigger if logic allows (though setter is fine)
-        
+        if (IsExtracting) return;
+
         // Validate archive format
         if (!IsSupportedArchive(path))
         {
-            Log($"ERROR: Unsupported archive format.");
-            Log("Only tar archives are supported: .tar.gz, .tar.xz, .tar.bz2, .tgz, .tar");
-            Log("FPM requires tar-based archives for proper Linux package creation.");
+            Log("ERROR: Unsupported archive format.");
+            Log(
+                "Only tar archives are supported: " +
+                ".tar.gz, .tar.xz, .tar.bz2, .tgz, .tar"
+            );
+            Log(
+                "FPM requires tar-based archives for proper Linux " +
+                "package creation."
+            );
             return;
         }
-        
+
         IsExtracting = true;
-        
-        try 
+
+        try
         {
             Log($"Analyzing archive: {Path.GetFileName(path)}");
-            
+
             // 1. Metadata - use StripArchiveExtensions for proper name extraction
-            string baseName = StripArchiveExtensions(Path.GetFileName(path));
+            string baseName =
+                StripArchiveExtensions(Path.GetFileName(path));
+
             AppName = SanitizeAppName(baseName);
             AppVersion = DetectVersionFromPath(baseName);
             AppIconBitmap = null; // Reset icon
@@ -190,12 +234,16 @@ public partial class InstallActions : UserControl
             _currentExtractedPath = null; // Reset path
 
             // 2. Pre-Extract
-            string tempDir = Path.Combine(Path.GetTempPath(), "Unpacker_" + Guid.NewGuid());
+            string tempDir = Path.Combine(
+                Path.GetTempPath(),
+                "Unpacker_" + Guid.NewGuid()
+            );
+
             Directory.CreateDirectory(tempDir);
-            
+
             Log("Extracting archive for inspection (background)...");
             await ExtractArchive(path, tempDir);
-            
+
             _currentExtractedPath = tempDir;
             Log($"Archive extracted to: {_currentExtractedPath}");
         }
@@ -212,102 +260,177 @@ public partial class InstallActions : UserControl
     private async void SelectIcon()
     {
         Log("[DEBUG] SelectIcon() called - button clicked!");
-        
+
         if (IsExtracting)
         {
-            Log("[WAIT] Please wait, archive is still being extracted...");
+            Log(
+                "[WAIT] Please wait, archive is still being extracted..."
+            );
             return;
         }
 
-        if (string.IsNullOrEmpty(_currentExtractedPath) || !Directory.Exists(_currentExtractedPath))
+        if (
+            string.IsNullOrEmpty(_currentExtractedPath) ||
+            !Directory.Exists(_currentExtractedPath)
+        )
         {
-            Log("[WARNING] Extraction failed or not found. Opening picker at default location.");
+            Log(
+                "[WARNING] Extraction failed or not found. " +
+                "Opening picker at default location."
+            );
+
             // We allow proceeding so at least the picker opens
         }
         else
         {
-             Log("[ACTION REQUIRED] Please select the icon file (png, jpg, svg) from the opened window.");
+            Log(
+                "[ACTION REQUIRED] Please select the icon file " +
+                "(png, jpg, svg) from the opened window."
+            );
         }
 
         var topLevel = TopLevel.GetTopLevel(this);
         if (topLevel == null) return;
 
         IStorageFolder? startLocation = null;
-        if (!string.IsNullOrEmpty(_currentExtractedPath) && Directory.Exists(_currentExtractedPath))
+
+        if (
+            !string.IsNullOrEmpty(_currentExtractedPath) &&
+            Directory.Exists(_currentExtractedPath)
+        )
         {
-            Log($"[DEBUG] Setting file picker start location to: {_currentExtractedPath}");
-            
-            try 
+            Log(
+                $"[DEBUG] Setting file picker start location to: " +
+                $"{_currentExtractedPath}"
+            );
+
+            try
             {
                 // Try Uri constructor first (most reliable)
-                startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(new Uri(_currentExtractedPath));
+                startLocation =
+                    await topLevel.StorageProvider
+                        .TryGetFolderFromPathAsync(
+                            new Uri(_currentExtractedPath)
+                        );
+
                 if (startLocation != null)
                 {
-                    Log($"[DEBUG] Successfully set start location using URI");
+                    Log(
+                        "[DEBUG] Successfully set start location using URI"
+                    );
                 }
             }
             catch (Exception ex)
             {
-                 Log($"[DEBUG] URI method failed: {ex.Message}");
-                 // Fallback 1: Try passing path string directly
-                 try 
-                 { 
-                     startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(_currentExtractedPath); 
-                     if (startLocation != null)
-                     {
-                         Log($"[DEBUG] Successfully set start location using direct path");
-                     }
-                 } 
-                 catch (Exception ex2)
-                 {
-                     Log($"[DEBUG] Direct path method failed: {ex2.Message}");
-                     // Fallback 2: Try parent directory if current path doesn't exist
-                     try
-                     {
-                         string parentDir = Path.GetDirectoryName(_currentExtractedPath) ?? "";
-                         if (!string.IsNullOrEmpty(parentDir) && Directory.Exists(parentDir))
-                         {
-                             startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(parentDir);
-                             if (startLocation != null)
-                             {
-                                 Log($"[DEBUG] Successfully set start location to parent directory: {parentDir}");
-                             }
-                         }
-                     }
-                     catch (Exception ex3)
-                     {
-                         Log($"[WARNING] All start location methods failed, using default: {ex3.Message}");
-                     }
-                 }
+                Log($"[DEBUG] URI method failed: {ex.Message}");
+
+                // Fallback 1: Try passing path string directly
+                try
+                {
+                    startLocation =
+                        await topLevel.StorageProvider
+                            .TryGetFolderFromPathAsync(
+                                _currentExtractedPath
+                            );
+
+                    if (startLocation != null)
+                    {
+                        Log(
+                            "[DEBUG] Successfully set start location " +
+                            "using direct path"
+                        );
+                    }
+                }
+                catch (Exception ex2)
+                {
+                    Log(
+                        $"[DEBUG] Direct path method failed: " +
+                        $"{ex2.Message}"
+                    );
+
+                    // Fallback 2: Try parent directory if current path doesn't exist
+                    try
+                    {
+                        string parentDir =
+                            Path.GetDirectoryName(
+                                _currentExtractedPath
+                            ) ?? "";
+
+                        if (
+                            !string.IsNullOrEmpty(parentDir) &&
+                            Directory.Exists(parentDir)
+                        )
+                        {
+                            startLocation =
+                                await topLevel.StorageProvider
+                                    .TryGetFolderFromPathAsync(parentDir);
+
+                            if (startLocation != null)
+                            {
+                                Log(
+                                    "[DEBUG] Successfully set start " +
+                                    $"location to parent directory: " +
+                                    $"{parentDir}"
+                                );
+                            }
+                        }
+                    }
+                    catch (Exception ex3)
+                    {
+                        Log(
+                            "[WARNING] All start location methods failed, " +
+                            $"using default: {ex3.Message}"
+                        );
+                    }
+                }
             }
         }
         else
         {
-            Log($"[DEBUG] No valid extracted path found, using default file picker location");
+            Log(
+                "[DEBUG] No valid extracted path found, " +
+                "using default file picker location"
+            );
         }
 
-        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title = "Select App Icon",
-            AllowMultiple = false,
-            SuggestedStartLocation = startLocation,
-            FileTypeFilter = new[]
-            {
-                new FilePickerFileType("Images") { Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.svg", "*.ico" } },
-                FilePickerFileTypes.All
-            }
-        });
+        var files =
+            await topLevel.StorageProvider.OpenFilePickerAsync(
+                new FilePickerOpenOptions
+                {
+                    Title = "Select App Icon",
+                    AllowMultiple = false,
+                    SuggestedStartLocation = startLocation,
+                    FileTypeFilter = new[]
+                    {
+                        new FilePickerFileType("Images")
+                        {
+                            Patterns = new[]
+                            {
+                                "*.png",
+                                "*.jpg",
+                                "*.jpeg",
+                                "*.svg",
+                                "*.ico"
+                            }
+                        },
+                        FilePickerFileTypes.All
+                    }
+                }
+            );
 
         if (files.Count > 0)
         {
             var p = files[0].Path.LocalPath;
+
             Log($"Icon selected: {p}");
             _selectedIconPath = p;
 
             try
             {
                 using var stream = File.OpenRead(p);
-                AppIconBitmap = new Avalonia.Media.Imaging.Bitmap(stream);
+
+                AppIconBitmap =
+                    new Avalonia.Media.Imaging.Bitmap(stream);
             }
             catch (Exception ex)
             {
@@ -318,7 +441,10 @@ public partial class InstallActions : UserControl
 
     // App Name
     public static readonly StyledProperty<string> AppNameProperty =
-        AvaloniaProperty.Register<InstallActions, string>(nameof(AppName), "Application");
+        AvaloniaProperty.Register<InstallActions, string>(
+            nameof(AppName),
+            "Application"
+        );
 
     public string AppName
     {
@@ -328,7 +454,10 @@ public partial class InstallActions : UserControl
 
     // App Version
     public static readonly StyledProperty<string> AppVersionProperty =
-        AvaloniaProperty.Register<InstallActions, string>(nameof(AppVersion), "1.0.0");
+        AvaloniaProperty.Register<InstallActions, string>(
+            nameof(AppVersion),
+            "1.0.0"
+        );
 
     public string AppVersion
     {
@@ -338,24 +467,34 @@ public partial class InstallActions : UserControl
 
     // system wide toggle ( install to opt)
     public static readonly StyledProperty<bool> IsSystemWideProperty =
-        AvaloniaProperty.Register<InstallActions, bool>(nameof(IsSystemWide), true);
+        AvaloniaProperty.Register<InstallActions, bool>(
+            nameof(IsSystemWide),
+            true
+        );
 
     public bool IsSystemWide
     {
         get => GetValue(IsSystemWideProperty);
-        set 
-        { 
+        set
+        {
             SetValue(IsSystemWideProperty, value);
-            
+
             // FIX: Manually update the other properties when this changes
-            InstallButtonText = value ? "Install (Admin)" : "Install";
-            ShieldOpacity = value ? 1.0 : 0.0;
+            InstallButtonText =
+                value ? "Install (Admin)" : "Install";
+
+            ShieldOpacity =
+                value ? 1.0 : 0.0;
         }
     }
-    
+
     // install button text
-    public static readonly StyledProperty<string> InstallButtonTextProperty =
-        AvaloniaProperty.Register<InstallActions, string>(nameof(InstallButtonText), "Install (Admin)");
+    public static readonly StyledProperty<string>
+        InstallButtonTextProperty =
+            AvaloniaProperty.Register<InstallActions, string>(
+                nameof(InstallButtonText),
+                "Install (Admin)"
+            );
 
     public string InstallButtonText
     {
@@ -365,7 +504,10 @@ public partial class InstallActions : UserControl
 
     // Shield Opacity
     public static readonly StyledProperty<double> ShieldOpacityProperty =
-        AvaloniaProperty.Register<InstallActions, double>(nameof(ShieldOpacity), 1.0);
+        AvaloniaProperty.Register<InstallActions, double>(
+            nameof(ShieldOpacity),
+            1.0
+        );
 
     public double ShieldOpacity
     {
@@ -375,7 +517,10 @@ public partial class InstallActions : UserControl
 
     // IsInstalling (View State)
     public static readonly StyledProperty<bool> IsInstallingProperty =
-        AvaloniaProperty.Register<InstallActions, bool>(nameof(IsInstalling), false);
+        AvaloniaProperty.Register<InstallActions, bool>(
+            nameof(IsInstalling),
+            false
+        );
 
     public bool IsInstalling
     {
@@ -384,8 +529,12 @@ public partial class InstallActions : UserControl
     }
 
     // IsInstallationDone (View State)
-    public static readonly StyledProperty<bool> IsInstallationDoneProperty =
-        AvaloniaProperty.Register<InstallActions, bool>(nameof(IsInstallationDone), false);
+    public static readonly StyledProperty<bool>
+        IsInstallationDoneProperty =
+            AvaloniaProperty.Register<InstallActions, bool>(
+                nameof(IsInstallationDone),
+                false
+            );
 
     public bool IsInstallationDone
     {
@@ -395,7 +544,10 @@ public partial class InstallActions : UserControl
 
     // Log Caret Index (Auto-scroll placeholder)
     public static readonly StyledProperty<int> LogCaretIndexProperty =
-        AvaloniaProperty.Register<InstallActions, int>(nameof(LogCaretIndex), 0);
+        AvaloniaProperty.Register<InstallActions, int>(
+            nameof(LogCaretIndex),
+            0
+        );
 
     public int LogCaretIndex
     {
@@ -404,8 +556,12 @@ public partial class InstallActions : UserControl
     }
 
     // Installation Logs
-    public static readonly StyledProperty<string> InstallationLogsProperty =
-        AvaloniaProperty.Register<InstallActions, string>(nameof(InstallationLogs), "");
+    public static readonly StyledProperty<string>
+        InstallationLogsProperty =
+            AvaloniaProperty.Register<InstallActions, string>(
+                nameof(InstallationLogs),
+                ""
+            );
 
     public string InstallationLogs
     {
@@ -417,36 +573,54 @@ public partial class InstallActions : UserControl
     {
         var msg = $"[{DateTime.Now:HH:mm:ss}] {message}";
         Console.WriteLine(msg);
-        
+
         // Dispatch to UI thread just in case, though we are mostly on UI thread or async
-        Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             var current = InstallationLogs ?? "";
-            if (!string.IsNullOrEmpty(current)) current += "\n";
+
+            if (!string.IsNullOrEmpty(current))
+            {
+                current += "\n";
+            }
+
             InstallationLogs = current + msg;
         });
     }
 
     // EVENTS
-    private async void OnBrowseClick(object sender, RoutedEventArgs e)
+    private async void OnBrowseClick(
+        object sender,
+        RoutedEventArgs e
+    )
     {
         // abstraction for x11/wayland topLevel handling
         var topLevel = TopLevel.GetTopLevel(this);
 
         if (topLevel == null) return;
 
-        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title = "Select Tar Archive to Install",
-            AllowMultiple = false,
-            FileTypeFilter = new[]
-            {
-                new FilePickerFileType("Tar Archives")
+        var files =
+            await topLevel.StorageProvider.OpenFilePickerAsync(
+                new FilePickerOpenOptions
                 {
-                    Patterns = new[] { "*.tar.gz", "*.tar.xz", "*.tar.bz2", "*.tgz", "*.tar" }
+                    Title = "Select Tar Archive to Install",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new FilePickerFileType("Tar Archives")
+                        {
+                            Patterns = new[]
+                            {
+                                "*.tar.gz",
+                                "*.tar.xz",
+                                "*.tar.bz2",
+                                "*.tgz",
+                                "*.tar"
+                            }
+                        }
+                    }
                 }
-            }
-        });
+            );
 
         if (files.Count > 0)
         {
@@ -454,23 +628,31 @@ public partial class InstallActions : UserControl
         }
     }
 
-    private async void OnInstallClick(object sender, RoutedEventArgs e)
+    private async void OnInstallClick(
+        object sender,
+        RoutedEventArgs e
+    )
     {
-        if (string.IsNullOrWhiteSpace(SourcePath) || !File.Exists(SourcePath))
+        if (
+            string.IsNullOrWhiteSpace(SourcePath) ||
+            !File.Exists(SourcePath)
+        )
         {
-            Log("Error: SourcePath is empty or file does not exist.");
+            Log(
+                "Error: SourcePath is empty or file does not exist."
+            );
             return;
         }
 
         // Visual feedback
         var originalText = InstallButtonText;
         InstallButtonText = "Installing...";
-        
+
         // Switch View
         IsInstalling = true;
         IsInstallationDone = false;
         InstallationLogs = ""; // Clear logs
-        
+
         Log($"Starting installation for: {SourcePath}");
 
         try
@@ -478,13 +660,26 @@ public partial class InstallActions : UserControl
             string tempDir = _currentExtractedPath;
 
             // Ensure extracted
-            if (string.IsNullOrEmpty(tempDir) || !Directory.Exists(tempDir))
+            if (
+                string.IsNullOrEmpty(tempDir) ||
+                !Directory.Exists(tempDir)
+            )
             {
-                 Log("Re-extracting archive...");
-                 tempDir = Path.Combine(Path.GetTempPath(), "Unpacker_" + Guid.NewGuid());
-                 Directory.CreateDirectory(tempDir);
-                 await ExtractArchive(SourcePath, tempDir);
-                 _currentExtractedPath = tempDir;
+                Log("Re-extracting archive...");
+
+                tempDir = Path.Combine(
+                    Path.GetTempPath(),
+                    "Unpacker_" + Guid.NewGuid()
+                );
+
+                Directory.CreateDirectory(tempDir);
+
+                await ExtractArchive(
+                    SourcePath,
+                    tempDir
+                );
+
+                _currentExtractedPath = tempDir;
             }
             else
             {
@@ -493,17 +688,31 @@ public partial class InstallActions : UserControl
 
             // 2. Detect Binary
             Log("Detecting binary...");
-            string? binaryPath = DetectExecutable(tempDir);
+
+            string? binaryPath =
+                DetectExecutable(tempDir);
+
             if (binaryPath == null)
             {
-                Log("Error: No binary (ELF) found in the archive.");
-                InstallButtonText = "Error: No Binary Found";
+                Log(
+                    "Error: No binary (ELF) found in the archive."
+                );
+
+                InstallButtonText =
+                    "Error: No Binary Found";
+
                 IsInstallationDone = true; // Allow user to go back
                 return;
             }
 
-            string appName = SanitizeAppName(AppName); // Sanitize the user-edited name just in case
-            Log($"Detected binary: {Path.GetFileName(binaryPath)}");
+            string appName =
+                SanitizeAppName(AppName);
+
+            Log(
+                $"Detected binary: " +
+                $"{Path.GetFileName(binaryPath)}"
+            );
+
             Log($"App Name: {appName}");
             Log($"Version: {AppVersion}");
 
@@ -511,12 +720,27 @@ public partial class InstallActions : UserControl
             if (IsSystemWide)
             {
                 Log("Installing System-Wide (FPM)...");
-                await InstallSystemWideWithFpm(tempDir, binaryPath, appName, AppName, AppVersion, _selectedIconPath);
+
+                await InstallSystemWideWithFpm(
+                    tempDir,
+                    binaryPath,
+                    appName,
+                    AppName,
+                    AppVersion,
+                    _selectedIconPath
+                );
             }
             else
             {
                 Log("Installing User-Local...");
-                await InstallUserLocal(tempDir, binaryPath, appName, AppName, _selectedIconPath);
+
+                await InstallUserLocal(
+                    tempDir,
+                    binaryPath,
+                    appName,
+                    AppName,
+                    _selectedIconPath
+                );
             }
 
             Log("Installation completed successfully!");
@@ -525,340 +749,774 @@ public partial class InstallActions : UserControl
         catch (Exception ex)
         {
             Log($"FATAL ERROR: {ex.Message}");
-            if (ex.StackTrace != null) Log(ex.StackTrace); 
+
+            if (ex.StackTrace != null)
+            {
+                Log(ex.StackTrace);
+            }
+
             InstallButtonText = "Error";
         }
         finally
         {
             // Cleanup
-            try { /* Keep temp dir for now if we want to reuse it? Or delete it always? */ 
-                  /* For now, delete it to be clean, but this means next install needs re-extract. */
-                  if (_currentExtractedPath != null) Directory.Delete(_currentExtractedPath, true); 
-                  _currentExtractedPath = null;
-            } catch (Exception cleanupEx) { Log($"Warning: Failed to clean up temp dir: {cleanupEx.Message}"); }
-            
-            InstallButtonText = originalText; // Reset button text for next time
-            IsInstallationDone = true; // Enable the "Done" button to go back
+            try
+            {
+                /* Keep temp dir for now if we want to reuse it? Or delete it always? */
+                /* For now, delete it to be clean, but this means next install needs re-extract. */
+                if (_currentExtractedPath != null)
+                {
+                    Directory.Delete(
+                        _currentExtractedPath,
+                        true
+                    );
+                }
+
+                _currentExtractedPath = null;
+            }
+            catch (Exception cleanupEx)
+            {
+                Log(
+                    $"Warning: Failed to clean up temp dir: " +
+                    $"{cleanupEx.Message}"
+                );
+            }
+
+            InstallButtonText = originalText;
+            IsInstallationDone = true;
         }
     }
 
-    private async Task InstallSystemWideWithFpm(string sourceDir, string binaryPath, string appName, string displayName, string version, string? iconPath)
+    private async Task InstallSystemWideWithFpm(
+        string sourceDir,
+        string binaryPath,
+        string appName,
+        string displayName,
+        string version,
+        string? iconPath
+    )
     {
         Log("Checking prerequisites...");
-        if (!IsCommandAvailable("fpm"))
-        {
-            throw new Exception("FPM is not installed. Please install 'ruby-dev' and 'gem install fpm'.");
-        }
 
-        string? packageType = GetSystemPackageType();
+        if (!await IsCommandAvailable("pkexec"))
+            throw new Exception(
+                "pkexec is not available. Install the 'pkexec' package to use system-wide installation"
+            );
+
+        if (!await IsCommandAvailable("fpm"))
+            throw new Exception(
+                "FPM is not installed. Please install " +
+                "'ruby-dev' and 'gem install fpm'."
+            );
+
+        string? packageType =
+            await GetSystemPackageType();
+
         if (packageType == null)
         {
-            throw new Exception("Unsupported system package manager (could not detect apt, dnf, rpm, or pacman).");
+            throw new Exception(
+                "Unsupported system package manager " +
+                "(could not detect apt, dnf, rpm, or pacman)."
+            );
         }
-        Log($"Detected Package Manager Type: {packageType}");
+
+        Log(
+            $"Detected Package Manager Type: {packageType}"
+        );
 
         // Prepare Staging Directory
-        string stagingDir = Path.Combine(sourceDir, "_staging");
-        Log($"Preparing staging directory: {stagingDir}");
-        
-        string installPrefix = $"/opt/{appName}";
-        string stagingInstallDir = Path.Combine(stagingDir, "opt", appName);
-        string stagingBinDir = Path.Combine(stagingDir, "usr", "bin");
-        string stagingDesktopDir = Path.Combine(stagingDir, "usr", "share", "applications");
+        string stagingDir =
+            Path.Combine(sourceDir, "_staging");
+
+        Log(
+            $"Preparing staging directory: {stagingDir}"
+        );
+
+        string installPrefix =
+            $"/opt/{appName}";
+
+        string stagingInstallDir =
+            Path.Combine(
+                stagingDir,
+                "opt",
+                appName
+            );
+
+        string stagingBinDir =
+            Path.Combine(
+                stagingDir,
+                "usr",
+                "bin"
+            );
+
+        string stagingDesktopDir =
+            Path.Combine(
+                stagingDir,
+                "usr",
+                "share",
+                "applications"
+            );
 
         Directory.CreateDirectory(stagingInstallDir);
         Directory.CreateDirectory(stagingBinDir);
         Directory.CreateDirectory(stagingDesktopDir);
 
         // Copy all extracted files to staging/opt/AppName
-        Log($"Copying files to {stagingInstallDir}...");
-        CopyDirectory(sourceDir, stagingInstallDir, exclude: "_staging");
+        Log(
+            $"Copying files to {stagingInstallDir}..."
+        );
+
+        CopyDirectory(
+            sourceDir,
+            stagingInstallDir,
+            exclude: "_staging"
+        );
 
         // Create Symlink for /usr/bin/AppName -> /opt/AppName/path/to/binary
-        string relBinaryPath = Path.GetRelativePath(sourceDir, binaryPath);
-        string targetPath = Path.Combine(installPrefix, relBinaryPath);
-        string symlinkPath = Path.Combine(stagingBinDir, appName);
-        
-        Log($"Creating symlink: {symlinkPath} -> {targetPath}");
-        File.CreateSymbolicLink(symlinkPath, targetPath);
+        string relBinaryPath =
+            Path.GetRelativePath(
+                sourceDir,
+                binaryPath
+            );
+
+        string targetPath =
+            Path.Combine(
+                installPrefix,
+                relBinaryPath
+            );
+
+        string symlinkPath =
+            Path.Combine(
+                stagingBinDir,
+                appName
+            );
+
+        Log(
+            $"Creating symlink: {symlinkPath} -> {targetPath}"
+        );
+
+        File.CreateSymbolicLink(
+            symlinkPath,
+            targetPath
+        );
 
         // Create Desktop File
         Log("Generating .desktop file...");
+
         string finalIconPath = "";
 
-        if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
+        if (
+            !string.IsNullOrEmpty(iconPath) &&
+            File.Exists(iconPath)
+        )
         {
-             // Copy icon to /opt/AppName/icon.png (Installation Directory)
-             // Staging path: stagingDir/opt/AppName/icon.png
-             
-             // Ensure stagingInstallDir exists (it should be created above)
-             string iconExt = Path.GetExtension(iconPath);
-             string iconDestFile = Path.Combine(stagingInstallDir, $"icon{iconExt}");
-             
-             Log($"Copying icon to app directory: {iconDestFile}");
-             File.Copy(iconPath, iconDestFile, true);
-             
-             // Final absolute path on target system
-             finalIconPath = Path.Combine(installPrefix, $"icon{iconExt}");
+            // Copy icon to /opt/AppName/icon.png (Installation Directory)
+            // Staging path: stagingDir/opt/AppName/icon.png
+
+            // Ensure stagingInstallDir exists (it should be created above)
+            string iconExt =
+                Path.GetExtension(iconPath);
+
+            string iconDestFile =
+                Path.Combine(
+                    stagingInstallDir,
+                    $"icon{iconExt}"
+                );
+
+            Log(
+                $"Copying icon to app directory: " +
+                $"{iconDestFile}"
+            );
+
+            File.Copy(
+                iconPath,
+                iconDestFile,
+                true
+            );
+
+            // Final absolute path on target system
+            finalIconPath =
+                Path.Combine(
+                    installPrefix,
+                    $"icon{iconExt}"
+                );
         }
 
-        await CreateDesktopFile(Path.Combine(stagingDesktopDir, $"{appName}.desktop"), displayName, $"/usr/bin/{appName}", finalIconPath);
+        await CreateDesktopFile(
+            Path.Combine(
+                stagingDesktopDir,
+                $"{appName}.desktop"
+            ),
+            displayName,
+            $"/usr/bin/{appName}",
+            finalIconPath
+        );
 
         // Build Package with FPM
         string outputDir = sourceDir;
+
         Log($"Using version: {version}");
-        
-        Log($"Building {packageType} package with FPM...");
-        
+        Log(
+            $"Building {packageType} package with FPM..."
+        );
+
         // Detect dependencies from the binary
-        var dependencies = await DetectDependencies(binaryPath, packageType);
-        
+        var dependencies =
+            await DetectDependencies(
+                binaryPath,
+                packageType
+            );
+
         // Create post-install script for cache updates
-        string postInstallScript = Path.Combine(sourceDir, "post-install.sh");
-        await CreatePostInstallScript(postInstallScript);
-        
+        string postInstallScript =
+            Path.Combine(
+                sourceDir,
+                "post-install.sh"
+            );
+
+        await CreatePostInstallScript(
+            postInstallScript
+        );
+
         // FPM arguments with metadata
         var fpmArgsList = new List<string>
         {
-            "-s", "dir",
-            "-t", packageType,
-            "-n", appName,
-            "-v", version,
-            "--description", $"{displayName} - installed via Unpacker",
-            "--maintainer", "Unpacker <unpacker@local>",
-            "--license", "Unknown",
-            "--url", "https://github.com/semilore317/Unpacker",
-            "--after-install", postInstallScript
+            "-s",
+            "dir",
+            "-t",
+            packageType,
+            "-n",
+            appName,
+            "-v",
+            version,
+            "--description",
+            $"{displayName} - installed via Unpacker",
+            "--maintainer",
+            "Unpacker <unpacker@local>",
+            "--license",
+            "Unknown",
+            "--url",
+            "https://github.com/semilore317/Unpacker",
+            "--after-install",
+            postInstallScript
         };
-        
+
         // Add dependencies
         foreach (var dep in dependencies)
         {
             fpmArgsList.Add("--depends");
             fpmArgsList.Add(dep);
         }
-        
-        // Add source and output
-        fpmArgsList.AddRange(new[] { "-C", stagingDir, "-p", outputDir, "." });
-        
-        // Join args with proper escaping for shell
-        var fpmArgs = string.Join(" ", fpmArgsList.Select(arg => 
-            arg.Contains(' ') || arg.Contains('\"') ? $"\"{arg.Replace("\"", "\\\"")}\"" : arg));
-        
-        await RunCommand("fpm", fpmArgs);
-        
-        // Cleanup post-install script
-        try { File.Delete(postInstallScript); } catch { }
 
-        // Find the generated package
-        string searchPattern = packageType switch
+        // Add source and output
+        fpmArgsList.AddRange(
+            new[]
+            {
+                "-C",
+                stagingDir,
+                "-p",
+                outputDir,
+                "."
+            }
+        );
+
+        await _processRunner.RunCheckedAsync(
+            "fpm",
+            fpmArgsList
+        );
+
+        // Cleanup post-install script
+        try
         {
-            "pacman" => "*.pkg.tar.*",
-            "deb" => "*.deb",
-            "rpm" => "*.rpm",
-            _ => "*.*"
-        };
-        var packageFile = Directory.GetFiles(outputDir, searchPattern).OrderByDescending(f => new FileInfo(f).LastWriteTime).FirstOrDefault();
-        if (packageFile == null)
+            File.Delete(postInstallScript);
+        }
+        catch
         {
-            throw new Exception($"FPM failed to generate a package file (searched for {searchPattern}).");
         }
 
-        Log($"Package created successfully: {packageFile}");
+        // Find the generated package
+        string searchPattern =
+            packageType switch
+            {
+                "pacman" => "*.pkg.tar.*",
+                "deb" => "*.deb",
+                "rpm" => "*.rpm",
+                _ => "*.*"
+            };
+
+        var packageFile =
+            Directory
+                .GetFiles(
+                    outputDir,
+                    searchPattern
+                )
+                .OrderByDescending(
+                    f => new FileInfo(f).LastWriteTime
+                )
+                .FirstOrDefault();
+
+        if (packageFile == null)
+        {
+            throw new Exception(
+                "FPM failed to generate a package file " +
+                $"(searched for {searchPattern})."
+            );
+        }
+
+        Log(
+            $"Package created successfully: {packageFile}"
+        );
 
         // Install the package
-        await InstallPackage(packageFile, packageType);
+        await InstallPackage(
+            packageFile,
+            packageType
+        );
     }
 
-    private string DetectVersionFromPath(string nameOrPath)
+    private string DetectVersionFromPath(
+        string nameOrPath
+    )
     {
         // Try to match standard version patterns like 1.2.3, v1.2, etc.
         // Note: Caller should pass already-stripped base name (without extensions)
         // Regex for x.y.z versioning
-        var match = System.Text.RegularExpressions.Regex.Match(nameOrPath, @"(\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9]+)?)");
+        var match =
+            System.Text.RegularExpressions.Regex.Match(
+                nameOrPath,
+                @"(\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9]+)?)"
+            );
+
         if (match.Success)
         {
             return match.Groups[1].Value;
         }
+
         return "1.0.0"; // Fallback
     }
 
-    private async Task InstallPackage(string packageFile, string packageType)
+    private async Task InstallPackage(
+        string packageFile,
+        string packageType
+    )
     {
-        // Ensure we work with absolute paths
-        packageFile = Path.GetFullPath(packageFile);
+        packageFile =
+            Path.GetFullPath(packageFile);
 
-        // Build argument list - using ArgumentList avoids shell quoting issues
-        var args = new List<string>();
-        
-        if (packageType == "deb")
+        string packageManager;
+        var packageArguments =
+            new List<string>();
+
+        switch (packageType)
         {
-            // pkexec sh -c "apt-get install -y /path/to/file.deb"
-            args.Add("sh");
-            args.Add("-c");
-            args.Add($"apt-get install -y '{packageFile}'");
-        }
-        else if (packageType == "pacman")
-        {
-            // pkexec sh -c "pacman -U --noconfirm /path/to/file.pkg.tar.zst"
-            args.Add("sh");
-            args.Add("-c");
-            args.Add($"pacman -U --noconfirm '{packageFile}'");
-        }
-        else
-        {
-            string pkgMgr = IsCommandAvailable("dnf") ? "dnf" : "rpm";
-            args.Add("sh");
-            args.Add("-c");
-            if (pkgMgr == "rpm") 
-                args.Add($"rpm -Uvh --force '{packageFile}'");
-            else 
-                args.Add($"dnf install -y '{packageFile}'");
+            case "deb":
+                packageManager = "apt-get";
+                packageArguments.Add("install");
+                packageArguments.Add("-y");
+                packageArguments.Add(packageFile);
+                break;
+
+            case "pacman":
+                packageManager = "pacman";
+                packageArguments.Add("-U");
+                packageArguments.Add("--noconfirm");
+                packageArguments.Add(packageFile);
+                break;
+
+            case "rpm":
+                if (await IsCommandAvailable("dnf"))
+                {
+                    packageManager = "dnf";
+                    packageArguments.Add("install");
+                    packageArguments.Add("-y");
+                    packageArguments.Add(packageFile);
+                }
+                else
+                {
+                    packageManager = "rpm";
+                    packageArguments.Add("-Uvh");
+                    packageArguments.Add("--force");
+                    packageArguments.Add(packageFile);
+                }
+                break;
+
+            default:
+                throw new InvalidOperationException(
+                    $"Unsupported package type '{packageType}'."
+                );
         }
 
-        Log($"Requesting sudo permissions to install package...");
-        Log($"Command: pkexec {string.Join(" ", args.Select(a => $"\"{a}\""))}");
-        
-        await RunCommandWithArgs("pkexec", args);
-        Log("Package installed successfully via system package manager.");
+        // Build the command that PolicyKit will authorize and execute as root.
+        // PolicyKit is preferred here since Unpacker is a GUI application
+        // and can integrate with a desktop authentication prompt.
+        var policyKitArguments =
+            new List<string>
+            {
+                "--disable-internal-agent",
+                packageManager
+            };
+
+        policyKitArguments.AddRange(packageArguments);
+
+        Log("Requesting admin permissions...");
+        Log(
+            $"Package Manager: {packageManager}"
+        );
+
+        await _processRunner.RunCheckedAsync(
+            "pkexec",
+            policyKitArguments
+        );
+
+        Log(
+            "Package installed successfully via system package manager!"
+        );
     }
 
-    private async Task InstallUserLocal(string sourceDir, string binaryPath, string appName, string displayName, string? iconPath)
+    private async Task InstallUserLocal(
+        string sourceDir,
+        string binaryPath,
+        string appName,
+        string displayName,
+        string? iconPath
+    )
     {
-        string targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), appName); 
-        string binDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin");
-        string desktopDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "applications");
+        string targetDir =
+            Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder
+                        .LocalApplicationData
+                ),
+                appName
+            );
 
-        Log($"Installing to user local directory: {targetDir}");
+        string binDir =
+            Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.UserProfile
+                ),
+                ".local",
+                "bin"
+            );
+
+        string desktopDir =
+            Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.UserProfile
+                ),
+                ".local",
+                "share",
+                "applications"
+            );
+
+        Log(
+            $"Installing to user local directory: {targetDir}"
+        );
+
         Log($"Bin directory: {binDir}");
 
-        string relBinaryPath = Path.GetRelativePath(sourceDir, binaryPath);
-        
+        string relBinaryPath =
+            Path.GetRelativePath(
+                sourceDir,
+                binaryPath
+            );
+
         // Generate script
         var sb = new StringBuilder();
         sb.AppendLine("#!/bin/bash");
         sb.AppendLine("set -e");
-        
-        sb.AppendLine($"mkdir -p \"{targetDir}\"");
-        sb.AppendLine($"mkdir -p \"{binDir}\"");
-        sb.AppendLine($"mkdir -p \"{desktopDir}\"");
-        
+
+        sb.AppendLine(
+            $"mkdir -p \"{targetDir}\""
+        );
+
+        sb.AppendLine(
+            $"mkdir -p \"{binDir}\""
+        );
+
+        sb.AppendLine(
+            $"mkdir -p \"{desktopDir}\""
+        );
+
         // Copy files
-        sb.AppendLine($"cp -r \"{sourceDir}/\"* \"{targetDir}/\" 2>/dev/null || true");
-        
+        sb.AppendLine(
+            $"cp -r \"{sourceDir}/\"* \"{targetDir}/\" " +
+            "2>/dev/null || true"
+        );
+
         // Symlink
-        sb.AppendLine($"ln -sf \"{targetDir}/{relBinaryPath}\" \"{binDir}/{appName}\"");
-        
+        sb.AppendLine(
+            $"ln -sf \"{targetDir}/{relBinaryPath}\" " +
+            $"\"{binDir}/{appName}\""
+        );
+
         // Icon Logic
         string iconLine = "";
-        if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
+
+        if (
+            !string.IsNullOrEmpty(iconPath) &&
+            File.Exists(iconPath)
+        )
         {
-             string iconExt = Path.GetExtension(iconPath);
-             sb.AppendLine($"cp \"{iconPath}\" \"{targetDir}/icon{iconExt}\"");
-             iconLine = $"Icon={targetDir}/icon{iconExt}";
-             Log($"Including icon in user installation.");
+            string iconExt =
+                Path.GetExtension(iconPath);
+
+            sb.AppendLine(
+                $"cp \"{iconPath}\" " +
+                $"\"{targetDir}/icon{iconExt}\""
+            );
+
+            iconLine =
+                $"Icon={targetDir}/icon{iconExt}";
+
+            Log(
+                "Including icon in user installation."
+            );
         }
 
         // Desktop File
-        sb.AppendLine($"cat > \"{desktopDir}/{appName}.desktop\" <<EOL");
+        sb.AppendLine(
+            $"cat > \"{desktopDir}/{appName}.desktop\" <<EOL"
+        );
+
         sb.AppendLine("[Desktop Entry]");
         sb.AppendLine($"Name={displayName}");
         sb.AppendLine($"Exec={binDir}/{appName}");
-        if (!string.IsNullOrEmpty(iconLine)) sb.AppendLine(iconLine);
+
+        if (!string.IsNullOrEmpty(iconLine))
+        {
+            sb.AppendLine(iconLine);
+        }
+
         sb.AppendLine("Type=Application");
         sb.AppendLine("Categories=Utility;");
         sb.AppendLine("Terminal=false");
         sb.AppendLine("EOL");
 
         // Run script
-        string scriptPath = Path.Combine(sourceDir, "install_user.sh");
-        await File.WriteAllTextAsync(scriptPath, sb.ToString());
-        File.SetUnixFileMode(scriptPath, File.GetUnixFileMode(scriptPath) | UnixFileMode.UserExecute);
+        string scriptPath =
+            Path.Combine(
+                sourceDir,
+                "install_user.sh"
+            );
 
-        await RunCommand("bash", $"\"{scriptPath}\"");
+        await File.WriteAllTextAsync(
+            scriptPath,
+            sb.ToString()
+        );
+
+        File.SetUnixFileMode(
+            scriptPath,
+            File.GetUnixFileMode(scriptPath) |
+            UnixFileMode.UserExecute
+        );
+
+        await _processRunner.RunCheckedAsync(
+            "bash",
+            new[] { scriptPath }
+        );
     }
 
     private string SanitizeAppName(string input)
     {
         // Input should already be stripped of extensions by StripArchiveExtensions
-        var safe = new string(input.Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_').ToArray());
-        return string.IsNullOrEmpty(safe) ? "unpacked-app" : safe.ToLowerInvariant();
+        var safe =
+            new string(
+                input
+                    .Where(
+                        c =>
+                            char.IsLetterOrDigit(c) ||
+                            c == '-' ||
+                            c == '_'
+                    )
+                    .ToArray()
+            );
+
+        return string.IsNullOrEmpty(safe)
+            ? "unpacked-app"
+            : safe.ToLowerInvariant();
     }
 
-    private static readonly string[] SupportedExtensions = 
-        { ".tar.gz", ".tar.xz", ".tar.bz2", ".tgz", ".tar" };
+    private static readonly string[]
+        SupportedExtensions =
+        {
+            ".tar.gz",
+            ".tar.xz",
+            ".tar.bz2",
+            ".tgz",
+            ".tar"
+        };
 
-    private string StripArchiveExtensions(string fileName)
+    private string StripArchiveExtensions(
+        string fileName
+    )
     {
         // Handle multi-part extensions like .tar.gz, .tar.xz
         foreach (var ext in SupportedExtensions)
         {
-            if (fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+            if (
+                fileName.EndsWith(
+                    ext,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
                 return fileName[..^ext.Length];
+            }
         }
-        return Path.GetFileNameWithoutExtension(fileName);
+
+        return Path.GetFileNameWithoutExtension(
+            fileName
+        );
     }
 
     private bool IsSupportedArchive(string path)
     {
-        string lower = path.ToLowerInvariant();
-        return SupportedExtensions.Any(ext => lower.EndsWith(ext));
+        string lower =
+            path.ToLowerInvariant();
+
+        return SupportedExtensions.Any(
+            ext => lower.EndsWith(ext)
+        );
     }
 
-    private string? GetSystemPackageType()
+    private async Task<string?>
+        GetSystemPackageType()
     {
-        if (IsCommandAvailable("pacman")) return "pacman";
-        if (IsCommandAvailable("apt-get")) return "deb";
-        if (IsCommandAvailable("dnf") || IsCommandAvailable("rpm")) return "rpm";
+        if (await IsCommandAvailable("pacman"))
+        {
+            return "pacman";
+        }
+
+        if (await IsCommandAvailable("apt-get"))
+        {
+            return "deb";
+        }
+
+        if (
+            await IsCommandAvailable("dnf") ||
+            await IsCommandAvailable("rpm")
+        )
+        {
+            return "rpm";
+        }
+
         return null;
     }
 
     /// <summary>
     /// Creates a post-install script that updates desktop and icon caches
     /// </summary>
-    private async Task CreatePostInstallScript(string scriptPath)
+    private async Task CreatePostInstallScript(
+        string scriptPath
+    )
     {
         var sb = new StringBuilder();
+
         sb.AppendLine("#!/bin/bash");
-        sb.AppendLine("# Post-install script generated by Unpacker");
-        sb.AppendLine("# Updates desktop database and icon caches");
+        sb.AppendLine(
+            "# Post-install script generated by Unpacker"
+        );
+        sb.AppendLine(
+            "# Updates desktop database and icon caches"
+        );
         sb.AppendLine();
-        sb.AppendLine("# Update desktop database (for .desktop files)");
-        sb.AppendLine("if command -v update-desktop-database &> /dev/null; then");
-        sb.AppendLine("    update-desktop-database -q /usr/share/applications 2>/dev/null || true");
+
+        sb.AppendLine(
+            "# Update desktop database (for .desktop files)"
+        );
+
+        sb.AppendLine(
+            "if command -v update-desktop-database " +
+            "&> /dev/null; then"
+        );
+
+        sb.AppendLine(
+            "    update-desktop-database -q " +
+            "/usr/share/applications " +
+            "2>/dev/null || true"
+        );
+
         sb.AppendLine("fi");
         sb.AppendLine();
-        sb.AppendLine("# Update icon cache (for application icons)");
-        sb.AppendLine("if command -v gtk-update-icon-cache &> /dev/null; then");
-        sb.AppendLine("    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true");
+
+        sb.AppendLine(
+            "# Update icon cache (for application icons)"
+        );
+
+        sb.AppendLine(
+            "if command -v gtk-update-icon-cache " +
+            "&> /dev/null; then"
+        );
+
+        sb.AppendLine(
+            "    gtk-update-icon-cache -q -t -f " +
+            "/usr/share/icons/hicolor " +
+            "2>/dev/null || true"
+        );
+
         sb.AppendLine("fi");
         sb.AppendLine();
-        sb.AppendLine("# Update MIME database (in case of custom file associations)");
-        sb.AppendLine("if command -v update-mime-database &> /dev/null; then");
-        sb.AppendLine("    update-mime-database /usr/share/mime 2>/dev/null || true");
+
+        sb.AppendLine(
+            "# Update MIME database " +
+            "(in case of custom file associations)"
+        );
+
+        sb.AppendLine(
+            "if command -v update-mime-database " +
+            "&> /dev/null; then"
+        );
+
+        sb.AppendLine(
+            "    update-mime-database " +
+            "/usr/share/mime " +
+            "2>/dev/null || true"
+        );
+
         sb.AppendLine("fi");
         sb.AppendLine();
         sb.AppendLine("exit 0");
-        
-        await File.WriteAllTextAsync(scriptPath, sb.ToString());
-        File.SetUnixFileMode(scriptPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
-                                          UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
-                                          UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-        
-        Log("Created post-install script for cache updates.");
+
+        await File.WriteAllTextAsync(
+            scriptPath,
+            sb.ToString()
+        );
+
+        File.SetUnixFileMode(
+            scriptPath,
+            UnixFileMode.UserRead |
+            UnixFileMode.UserWrite |
+            UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead |
+            UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead |
+            UnixFileMode.OtherExecute
+        );
+
+        Log(
+            "Created post-install script for cache updates."
+        );
     }
 
     /// <summary>
     /// Detects library dependencies using ldd and queries package manager for owning packages
     /// </summary>
-    private async Task<List<string>> DetectDependencies(string binaryPath, string packageType)
+    private async Task<List<string>>
+        DetectDependencies(
+            string binaryPath,
+            string packageType
+        )
     {
-        var dependencies = new HashSet<string>();
-        
+        var dependencies =
+            new HashSet<string>();
+
         try
         {
-            Log("Detecting dependencies with ldd...");
-            
+            Log(
+                "Detecting dependencies with ldd..."
+            );
+
             var psi = new ProcessStartInfo
             {
                 FileName = "ldd",
@@ -868,123 +1526,189 @@ public partial class InstallActions : UserControl
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            
+
             var p = Process.Start(psi);
-            if (p == null) return dependencies.ToList();
-            
-            string output = await p.StandardOutput.ReadToEndAsync();
+
+            if (p == null)
+            {
+                return dependencies.ToList();
+            }
+
+            string output =
+                await p.StandardOutput
+                    .ReadToEndAsync();
+
             await p.WaitForExitAsync();
-            
-            if (p.ExitCode != 0) return dependencies.ToList();
-            
+
+            if (p.ExitCode != 0)
+            {
+                return dependencies.ToList();
+            }
+
             // Parse ldd output - each line is like:
             // libfoo.so.1 => /usr/lib/libfoo.so.1 (0x...)
-            var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            var libraryPaths = new List<string>();
-            
+            var lines =
+                output.Split(
+                    '\n',
+                    StringSplitOptions.RemoveEmptyEntries
+                );
+
+            var libraryPaths =
+                new List<string>();
+
             foreach (var line in lines)
             {
                 var trimmed = line.Trim();
-                if (string.IsNullOrEmpty(trimmed) || 
-                    trimmed.Contains("not found") || 
+
+                if (
+                    string.IsNullOrEmpty(trimmed) ||
+                    trimmed.Contains("not found") ||
                     trimmed.StartsWith("linux-vdso") ||
-                    trimmed.StartsWith("linux-gate"))
+                    trimmed.StartsWith("linux-gate")
+                )
+                {
                     continue;
-                
+                }
+
                 // Extract the library path (after "=>")
-                var parts = trimmed.Split("=>", StringSplitOptions.TrimEntries);
+                var parts =
+                    trimmed.Split(
+                        "=>",
+                        StringSplitOptions.TrimEntries
+                    );
+
                 if (parts.Length >= 2)
                 {
                     // Get path before the memory address
-                    var pathPart = parts[1].Split('(')[0].Trim();
-                    if (!string.IsNullOrEmpty(pathPart) && pathPart.StartsWith("/"))
+                    var pathPart =
+                        parts[1]
+                            .Split('(')[0]
+                            .Trim();
+
+                    if (
+                        !string.IsNullOrEmpty(pathPart) &&
+                        pathPart.StartsWith("/")
+                    )
                     {
                         libraryPaths.Add(pathPart);
                     }
                 }
             }
-            
-            Log($"Found {libraryPaths.Count} library paths, querying package manager...");
-            
+
+            Log(
+                $"Found {libraryPaths.Count} library paths, " +
+                "querying package manager..."
+            );
+
             // Query package manager for each library
             foreach (var libPath in libraryPaths)
             {
-                string? packageName = await QueryPackageOwner(libPath, packageType);
+                string? packageName =
+                    await QueryPackageOwner(
+                        libPath,
+                        packageType
+                    );
+
                 if (packageName != null)
                 {
                     dependencies.Add(packageName);
                 }
             }
-            
-            Log($"Detected {dependencies.Count} dependencies: {string.Join(", ", dependencies.Take(5))}{(dependencies.Count > 5 ? "..." : "")}");
+
+            Log(
+                $"Detected {dependencies.Count} dependencies: " +
+                $"{string.Join(", ", dependencies.Take(5))}" +
+                $"{(dependencies.Count > 5 ? "..." : "")}"
+            );
         }
         catch (Exception ex)
         {
-            Log($"Warning: Dependency detection failed: {ex.Message}");
+            Log(
+                $"Warning: Dependency detection failed: " +
+                $"{ex.Message}"
+            );
         }
-        
+
         return dependencies.ToList();
     }
 
     /// <summary>
     /// Queries the package manager to find which package owns a library file
     /// </summary>
-    private async Task<string?> QueryPackageOwner(string libraryPath, string packageType)
+    private async Task<string?> QueryPackageOwner(
+        string libraryPath,
+        string packageType
+    )
     {
         try
         {
             string command;
-            string args;
-            
+            string[] arguments;
+
             switch (packageType)
             {
                 case "deb":
                     command = "dpkg";
-                    args = $"-S \"{libraryPath}\"";
+                    arguments =
+                        new[] { "-S", libraryPath };
                     break;
-                case "rpm":
-                    command = "rpm";
-                    args = $"-qf \"{libraryPath}\"";
-                    break;
+
                 case "pacman":
                     command = "pacman";
-                    args = $"-Qo \"{libraryPath}\"";
+                    arguments =
+                        new[] { "-Qo", libraryPath };
                     break;
+
+                case "rpm":
+                    command = "rpm";
+                    arguments =
+                        new[] { "-qf", libraryPath };
+                    break;
+
                 default:
                     return null;
             }
-            
-            var psi = new ProcessStartInfo
+
+            var result =
+                await _processRunner.RunAsync(
+                    command,
+                    arguments
+                );
+
+            if (result.ExitCode != 0)
             {
-                FileName = command,
-                Arguments = args,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            
-            var p = Process.Start(psi);
-            if (p == null) return null;
-            
-            string output = await p.StandardOutput.ReadToEndAsync();
-            await p.WaitForExitAsync();
-            
-            if (p.ExitCode != 0) return null;
-            
-            // Parse output based on package manager format
+                return null;
+            }
+
+            string output =
+                result.StandardOutput;
+
             return packageType switch
             {
-                // dpkg -S output: "packagename:arch: /path/to/lib" or "packagename: /path/to/lib"
-                "deb" => output.Split(':')[0].Trim(),
-                
-                // rpm -qf output: "packagename-version-release.arch"
-                // Extract just the package name (before version)
-                "rpm" => ExtractRpmPackageName(output.Trim()),
-                
-                // pacman -Qo output: "/path/to/lib is owned by packagename version"
-                "pacman" => output.Split(" is owned by ").LastOrDefault()?.Split(' ').FirstOrDefault()?.Trim(),
-                
+                // dpkg -S
+                // package-name:architecture:
+                "deb" =>
+                    output
+                        .Split(':')[0]
+                        .Trim(),
+
+                // rpm -qf:
+                // package-name-version-release.arch
+                "rpm" =>
+                    ExtractRpmPackageName(
+                        output.Trim()
+                    ),
+
+                // pacman -Qo:
+                // /path/to/library is owned by package-name version
+                "pacman" =>
+                    output
+                        .Split(" is owned by ")
+                        .LastOrDefault()?
+                        .Split(' ')
+                        .FirstOrDefault()?
+                        .Trim(),
+
                 _ => null
             };
         }
@@ -997,43 +1721,54 @@ public partial class InstallActions : UserControl
     /// <summary>
     /// Extracts the package name from RPM full package string (name-version-release.arch)
     /// </summary>
-    private string? ExtractRpmPackageName(string fullName)
+    private string? ExtractRpmPackageName(
+        string fullName
+    )
     {
-        if (string.IsNullOrEmpty(fullName)) return null;
-        
+        if (string.IsNullOrEmpty(fullName))
+        {
+            return null;
+        }
+
         // RPM format: name-version-release.arch
         // We need to find the name part (everything before the version)
         // Version typically starts with a digit after a hyphen
         var parts = fullName.Split('-');
         var nameParts = new List<string>();
-        
+
         for (int i = 0; i < parts.Length; i++)
         {
             // If this part starts with a digit and we have at least one part, this is likely the version
-            if (i > 0 && parts[i].Length > 0 && char.IsDigit(parts[i][0]))
+            if (
+                i > 0 &&
+                parts[i].Length > 0 &&
+                char.IsDigit(parts[i][0])
+            )
             {
                 break;
             }
+
             nameParts.Add(parts[i]);
         }
-        
-        return nameParts.Count > 0 ? string.Join("-", nameParts) : null;
+
+        return nameParts.Count > 0
+            ? string.Join("-", nameParts)
+            : null;
     }
 
-    private bool IsCommandAvailable(string command)
+    private async Task<bool> IsCommandAvailable(
+        string command
+    )
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "which",
-            Arguments = command,
-            RedirectStandardOutput = true,
-            UseShellExecute = false
-        };
         try
         {
-            var p = Process.Start(psi);
-            p?.WaitForExit();
-            return p?.ExitCode == 0;
+            var result =
+                await _processRunner.RunAsync(
+                    "which",
+                    new[] { command }
+                );
+
+            return result.ExitCode == 0;
         }
         catch
         {
@@ -1041,160 +1776,163 @@ public partial class InstallActions : UserControl
         }
     }
 
-    private async Task RunCommand(string fileName, string args)
+    private void CopyDirectory(
+        string sourceDir,
+        string destDir,
+        string exclude = null
+    )
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = fileName,
-            Arguments = args,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var dir =
+            new DirectoryInfo(sourceDir);
 
-        var p = Process.Start(psi);
-        if (p == null) throw new Exception($"Failed to start {fileName}");
-
-        // Read stdout/stderr BEFORE WaitForExitAsync to prevent deadlock
-        // when output buffers fill up
-        var stdoutTask = p.StandardOutput.ReadToEndAsync();
-        var stderrTask = p.StandardError.ReadToEndAsync();
-        
-        await p.WaitForExitAsync();
-        
-        string stdout = await stdoutTask;
-        string stderr = await stderrTask;
-
-        if (p.ExitCode != 0)
-        {
-            throw new Exception($"Command '{fileName} {args}' failed with code {p.ExitCode}.\nStdOut: {stdout}\nStdErr: {stderr}");
-        }
-    }
-
-    private async Task RunCommandWithArgs(string fileName, IEnumerable<string> args)
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = fileName,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        
-        // Add each argument as a discrete item - this preserves arguments with spaces
-        foreach (var arg in args)
-        {
-            psi.ArgumentList.Add(arg);
-        }
-
-        var p = Process.Start(psi);
-        if (p == null) throw new Exception($"Failed to start {fileName}");
-
-        // Read stdout/stderr BEFORE WaitForExitAsync to prevent deadlock
-        var stdoutTask = p.StandardOutput.ReadToEndAsync();
-        var stderrTask = p.StandardError.ReadToEndAsync();
-        
-        await p.WaitForExitAsync();
-        
-        string stdout = await stdoutTask;
-        string stderr = await stderrTask;
-
-        if (p.ExitCode != 0)
-        {
-            throw new Exception($"Command '{fileName}' failed with code {p.ExitCode}.\nStdOut: {stdout}\nStdErr: {stderr}");
-        }
-    }
-
-    private void CopyDirectory(string sourceDir, string destDir, string exclude = null)
-    {
-        var dir = new DirectoryInfo(sourceDir);
         foreach (var file in dir.GetFiles())
         {
-            file.CopyTo(Path.Combine(destDir, file.Name), true);
+            file.CopyTo(
+                Path.Combine(
+                    destDir,
+                    file.Name
+                ),
+                true
+            );
         }
 
         foreach (var subDir in dir.GetDirectories())
         {
-            if (exclude != null && subDir.Name == exclude) continue;
-            
-            string nextDest = Path.Combine(destDir, subDir.Name);
-            Directory.CreateDirectory(nextDest);
-            CopyDirectory(subDir.FullName, nextDest, exclude); 
+            if (
+                exclude != null &&
+                subDir.Name == exclude
+            )
+            {
+                continue;
+            }
+
+            string nextDest =
+                Path.Combine(
+                    destDir,
+                    subDir.Name
+                );
+
+            Directory.CreateDirectory(
+                nextDest
+            );
+
+            CopyDirectory(
+                subDir.FullName,
+                nextDest,
+                exclude
+            );
         }
     }
 
-    private Task CreateDesktopFile(string path, string displayName, string execPath, string iconName = "")
+    private Task CreateDesktopFile(
+        string path,
+        string displayName,
+        string execPath,
+        string iconName = ""
+    )
     {
         var sb = new StringBuilder();
+
         sb.AppendLine("[Desktop Entry]");
         sb.AppendLine($"Name={displayName}");
         sb.AppendLine($"Exec={execPath}");
+
         if (!string.IsNullOrEmpty(iconName))
         {
             sb.AppendLine($"Icon={iconName}");
         }
+
         sb.AppendLine("Type=Application");
         sb.AppendLine("Categories=Utility;");
         sb.AppendLine("Terminal=false");
-        
-        return File.WriteAllTextAsync(path, sb.ToString());
+
+        return File.WriteAllTextAsync(
+            path,
+            sb.ToString()
+        );
     }
-    
-    private async Task ExtractArchive(string archivePath, string destDir)
+
+    private async Task ExtractArchive(
+        string archivePath,
+        string destDir
+    )
     {
-        await Task.Run(async () =>
-        {
-            var psi = new ProcessStartInfo
+        await _processRunner.RunCheckedAsync(
+            "tar",
+            new[]
             {
-                FileName = "tar",
-                Arguments = $"-xf \"{archivePath}\" -C \"{destDir}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            
-            var p = Process.Start(psi);
-            if (p == null) throw new Exception("Failed to start tar process.");
-            
-            // Capture stderr for better error messages
-            string stderr = await p.StandardError.ReadToEndAsync();
-            await p.WaitForExitAsync();
-            
-            if (p.ExitCode != 0)
-            {
-                throw new Exception($"Tar extraction failed: {stderr}");
+                "-xf",
+                archivePath,
+                "-C",
+                destDir
             }
-        });
+        );
     }
 
     private string? DetectExecutable(string dir)
     {
-        var files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories);
-        Log($"Scanning {files.Length} files for executables...");
+        var files =
+            Directory.GetFiles(
+                dir,
+                "*",
+                SearchOption.AllDirectories
+            );
 
-        var candidates = new List<(string Path, bool IsElf, bool IsScript)>();
+        Log(
+            $"Scanning {files.Length} files for executables..."
+        );
+
+        var candidates =
+            new List<(
+                string Path,
+                bool IsElf,
+                bool IsScript
+            )>();
 
         foreach (var file in files)
         {
-            if (new FileInfo(file).Length == 0) continue;
-            
+            if (new FileInfo(file).Length == 0)
+            {
+                continue;
+            }
+
             bool isElf = IsElf(file);
-            bool isScript = !isElf && IsShellScript(file);
+            bool isScript =
+                !isElf && IsShellScript(file);
 
             if (isElf || isScript)
             {
-                candidates.Add((file, isElf, isScript));
+                candidates.Add(
+                    (
+                        file,
+                        isElf,
+                        isScript
+                    )
+                );
             }
         }
 
         if (candidates.Count == 0)
         {
-            Log("Debug info: No candidates found. Listing all files:");
-            foreach (var f in files.Take(20)) Log($" - {Path.GetFileName(f)}");
-            if (files.Length > 20) Log($" ... and {files.Length - 20} more.");
+            Log(
+                "Debug info: No candidates found. " +
+                "Listing all files:"
+            );
+
+            foreach (var f in files.Take(20))
+            {
+                Log(
+                    $" - {Path.GetFileName(f)}"
+                );
+            }
+
+            if (files.Length > 20)
+            {
+                Log(
+                    $" ... and {files.Length - 20} more."
+                );
+            }
+
             return null;
         }
 
@@ -1204,50 +1942,125 @@ public partial class InstallActions : UserControl
         // 3. Only use scripts as last resort
 
         // Use StripArchiveExtensions to properly handle .tar.gz, .tar.xz, etc.
-        var appName = SanitizeAppName(StripArchiveExtensions(Path.GetFileName(SourcePath)));
-        
+        var appName =
+            SanitizeAppName(
+                StripArchiveExtensions(
+                    Path.GetFileName(SourcePath)
+                )
+            );
+
         // Debug: Show candidate breakdown
-        int elfCount = candidates.Count(c => c.IsElf);
-        int scriptCount = candidates.Count(c => c.IsScript);
-        Log($"Found {elfCount} ELF binaries and {scriptCount} scripts");
-        
+        int elfCount =
+            candidates.Count(c => c.IsElf);
+
+        int scriptCount =
+            candidates.Count(c => c.IsScript);
+
+        Log(
+            $"Found {elfCount} ELF binaries and " +
+            $"{scriptCount} scripts"
+        );
+
         if (elfCount > 0)
         {
-            Log($"ELF candidates: {string.Join(", ", candidates.Where(c => c.IsElf).Take(5).Select(c => Path.GetFileName(c.Path)))}");
+            Log(
+                $"ELF candidates: " +
+                $"{string.Join(
+                    ", ",
+                    candidates
+                        .Where(c => c.IsElf)
+                        .Take(5)
+                        .Select(
+                            c =>
+                                Path.GetFileName(
+                                    c.Path
+                                )
+                        )
+                )}"
+            );
         }
-        
-        Log($"Filtering candidates for app name: {appName}");
+
+        Log(
+            $"Filtering candidates for app name: " +
+            $"{appName}"
+        );
 
         // 2. Name Match - ONLY for ELF binaries (scripts like bump.sh should not match)
         // Strip non-letters for fuzzy comparison
-        var simpleAppName = new string(appName.Where(char.IsLetter).ToArray()).ToLowerInvariant();
-        
-        var nameMatch = candidates
-            .Where(c => c.IsElf) // Only consider ELF binaries for name matching
-            .Where(c => 
-            {
-                var simpleName = new string(Path.GetFileNameWithoutExtension(c.Path).Where(char.IsLetter).ToArray()).ToLowerInvariant();
-                return simpleName.Contains(simpleAppName) || simpleAppName.Contains(simpleName);
-            })
-            .OrderBy(c => Path.GetFileName(c.Path).Length) // Prefer shorter names (e.g. 'beekeeper-studio' over 'beekeeper-studio-bin')
-            .FirstOrDefault();
-        
-        if (nameMatch.Path != null) return nameMatch.Path;
+        var simpleAppName =
+            new string(
+                appName
+                    .Where(char.IsLetter)
+                    .ToArray()
+            )
+            .ToLowerInvariant();
+
+        var nameMatch =
+            candidates
+                .Where(c => c.IsElf)
+                .Where(c =>
+                {
+                    var simpleName =
+                        new string(
+                            Path
+                                .GetFileNameWithoutExtension(
+                                    c.Path
+                                )
+                                .Where(char.IsLetter)
+                                .ToArray()
+                        )
+                        .ToLowerInvariant();
+
+                    return
+                        simpleName.Contains(
+                            simpleAppName
+                        ) ||
+                        simpleAppName.Contains(
+                            simpleName
+                        );
+                })
+                .OrderBy(
+                    c =>
+                        Path.GetFileName(
+                            c.Path
+                        ).Length
+                )
+                .FirstOrDefault();
+
+        if (nameMatch.Path != null)
+        {
+            return nameMatch.Path;
+        }
 
         // 3. Fallback: Largest ELF (usually the main binary for Electron apps, etc.)
-        var largestElf = candidates
-            .Where(c => c.IsElf)
-            .OrderByDescending(c => new FileInfo(c.Path).Length)
-            .FirstOrDefault();
-        
-        if (largestElf.Path != null) return largestElf.Path;
+        var largestElf =
+            candidates
+                .Where(c => c.IsElf)
+                .OrderByDescending(
+                    c =>
+                        new FileInfo(
+                            c.Path
+                        ).Length
+                )
+                .FirstOrDefault();
+
+        if (largestElf.Path != null)
+        {
+            return largestElf.Path;
+        }
 
         // 4. Last resort: Any script (prefer shorter names like 'run' or 'start')
-        var script = candidates
-            .Where(c => c.IsScript)
-            .OrderBy(c => Path.GetFileName(c.Path).Length)
-            .FirstOrDefault();
-            
+        var script =
+            candidates
+                .Where(c => c.IsScript)
+                .OrderBy(
+                    c =>
+                        Path.GetFileName(
+                            c.Path
+                        ).Length
+                )
+                .FirstOrDefault();
+
         return script.Path;
     }
 
@@ -1255,12 +2068,26 @@ public partial class InstallActions : UserControl
     {
         try
         {
-            using var fs = File.OpenRead(path);
+            using var fs =
+                File.OpenRead(path);
+
             var buffer = new byte[4];
-            if (fs.Read(buffer, 0, 4) < 4) return false;
-            return buffer[0] == 0x7F && buffer[1] == 0x45 && buffer[2] == 0x4C && buffer[3] == 0x46;
+
+            if (fs.Read(buffer, 0, 4) < 4)
+            {
+                return false;
+            }
+
+            return
+                buffer[0] == 0x7F &&
+                buffer[1] == 0x45 &&
+                buffer[2] == 0x4C &&
+                buffer[3] == 0x46;
         }
-        catch { return false; }
+        catch
+        {
+            return false;
+        }
     }
 
     private bool IsShellScript(string path)
@@ -1268,11 +2095,23 @@ public partial class InstallActions : UserControl
         try
         {
             // Check for Shebang #!
-            using var fs = File.OpenRead(path);
+            using var fs =
+                File.OpenRead(path);
+
             var buffer = new byte[2];
-            if (fs.Read(buffer, 0, 2) < 2) return false;
-            return buffer[0] == '#' && buffer[1] == '!';
+
+            if (fs.Read(buffer, 0, 2) < 2)
+            {
+                return false;
+            }
+
+            return
+                buffer[0] == '#' &&
+                buffer[1] == '!';
         }
-        catch { return false; }
+        catch
+        {
+            return false;
+        }
     }
 }
