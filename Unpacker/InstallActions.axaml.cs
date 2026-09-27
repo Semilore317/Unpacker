@@ -38,6 +38,7 @@ public partial class InstallActions : UserControl
 {
     private readonly ProcessRunner _processRunner = new();
     private readonly ArchiveInspector _archiveInspector = new();
+    private readonly UserLocalInstaller _userLocalInstaller = new();
     private readonly ElfDependencyInspector _elfDependencyInspector;
 
     public InstallActions()
@@ -740,7 +741,7 @@ public partial class InstallActions : UserControl
             {
                 Log("Installing User-Local...");
 
-                await InstallUserLocal(
+                await _userLocalInstaller.InstallAsync(
                     tempDir,
                     binaryPath,
                     appName,
@@ -1176,150 +1177,6 @@ public partial class InstallActions : UserControl
 
         Log(
             "Package installed successfully via system package manager!"
-        );
-    }
-
-    private async Task InstallUserLocal(
-        string sourceDir,
-        string binaryPath,
-        string appName,
-        string displayName,
-        string? iconPath
-    )
-    {
-        string targetDir =
-            Path.Combine(
-                Environment.GetFolderPath(
-                    Environment.SpecialFolder
-                        .LocalApplicationData
-                ),
-                appName
-            );
-
-        string binDir =
-            Path.Combine(
-                Environment.GetFolderPath(
-                    Environment.SpecialFolder.UserProfile
-                ),
-                ".local",
-                "bin"
-            );
-
-        string desktopDir =
-            Path.Combine(
-                Environment.GetFolderPath(
-                    Environment.SpecialFolder.UserProfile
-                ),
-                ".local",
-                "share",
-                "applications"
-            );
-
-        Log(
-            $"Installing to user local directory: {targetDir}"
-        );
-
-        Log($"Bin directory: {binDir}");
-
-        string relBinaryPath =
-            Path.GetRelativePath(
-                sourceDir,
-                binaryPath
-            );
-
-        // Generate script
-        var sb = new StringBuilder();
-        sb.AppendLine("#!/bin/bash");
-        sb.AppendLine("set -e");
-
-        sb.AppendLine(
-            $"mkdir -p \"{targetDir}\""
-        );
-
-        sb.AppendLine(
-            $"mkdir -p \"{binDir}\""
-        );
-
-        sb.AppendLine(
-            $"mkdir -p \"{desktopDir}\""
-        );
-
-        // Copy files
-        sb.AppendLine(
-            $"cp -r \"{sourceDir}/\"* \"{targetDir}/\" " +
-            "2>/dev/null || true"
-        );
-
-        // Symlink
-        sb.AppendLine(
-            $"ln -sf \"{targetDir}/{relBinaryPath}\" " +
-            $"\"{binDir}/{appName}\""
-        );
-
-        // Icon Logic
-        string iconLine = "";
-
-        if (
-            !string.IsNullOrEmpty(iconPath) &&
-            File.Exists(iconPath)
-        )
-        {
-            string iconExt =
-                Path.GetExtension(iconPath);
-
-            sb.AppendLine(
-                $"cp \"{iconPath}\" " +
-                $"\"{targetDir}/icon{iconExt}\""
-            );
-
-            iconLine =
-                $"Icon={targetDir}/icon{iconExt}";
-
-            Log(
-                "Including icon in user installation."
-            );
-        }
-
-        // Desktop File
-        sb.AppendLine(
-            $"cat > \"{desktopDir}/{appName}.desktop\" <<EOL"
-        );
-
-        sb.AppendLine("[Desktop Entry]");
-        sb.AppendLine($"Name={displayName}");
-        sb.AppendLine($"Exec={binDir}/{appName}");
-
-        if (!string.IsNullOrEmpty(iconLine))
-        {
-            sb.AppendLine(iconLine);
-        }
-
-        sb.AppendLine("Type=Application");
-        sb.AppendLine("Categories=Utility;");
-        sb.AppendLine("Terminal=false");
-        sb.AppendLine("EOL");
-
-        // Run script
-        string scriptPath =
-            Path.Combine(
-                sourceDir,
-                "install_user.sh"
-            );
-
-        await File.WriteAllTextAsync(
-            scriptPath,
-            sb.ToString()
-        );
-
-        File.SetUnixFileMode(
-            scriptPath,
-            File.GetUnixFileMode(scriptPath) |
-            UnixFileMode.UserExecute
-        );
-
-        await _processRunner.RunCheckedAsync(
-            "bash",
-            new[] { scriptPath }
         );
     }
 
