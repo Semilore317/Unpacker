@@ -1,7 +1,5 @@
 # Unpacker
 
-[![CI](https://github.com/Semilore317/Unpacker/actions/workflows/ci.yml/badge.svg)](https://github.com/Semilore317/Unpacker/actions/workflows/ci.yml)
-
 Unpacker is a Linux desktop app for installing software shipped as tarballs. It can set an app up in `~/.local` without admin access, or build a native package with FPM.
 
 ## What it does
