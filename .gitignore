@@ -4,3 +4,26 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 /releases
+
+# .NET
+bin/
+obj/
+/packages/
+
+# JetBrains / Rider
+.idea/
+*.iml
+*.DotSettings.user
+/_ReSharper.Caches/
+
+# VS Code / Zed
+.vscode/
+.zed/
+
+# Build artifacts
+/build/
+/releases/
+
+# OS files
+.DS_Store
+Thumbs.db
