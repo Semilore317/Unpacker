@@ -1,28 +1,21 @@
-bin/
-obj/
-/packages/
-riderModule.iml
-/_ReSharper.Caches/
-/releases
-
 # .NET
 bin/
 obj/
-/packages/
+packages/
 
 # JetBrains / Rider
 .idea/
 *.iml
 *.DotSettings.user
-/_ReSharper.Caches/
+_ReSharper.Caches/
 
 # VS Code / Zed
 .vscode/
 .zed/
 
 # Build artifacts
-/build/
-/releases/
+build/
+releases/
 
 # OS files
 .DS_Store
