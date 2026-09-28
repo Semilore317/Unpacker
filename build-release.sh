@@ -23,10 +23,6 @@ echo "=========================================="
 echo "  Building Unpacker v$VERSION"
 echo "=========================================="
 
-# Clean previous builds
-rm -rf "$BUILD_DIR" "$OUTPUT_DIR"
-mkdir -p "$BUILD_DIR" "$PUBLISH_DIR" "$OUTPUT_DIR"
-
 # Check prerequisites
 echo ""
 echo "[1/5] Checking prerequisites..."
@@ -42,8 +38,26 @@ if ! command -v fpm &> /dev/null; then
     exit 1
 fi
 
+if ! command -v rpmbuild &> /dev/null; then
+    echo "ERROR: rpmbuild is not installed"
+    echo "Install your distribution's RPM build tools"
+    exit 1
+fi
+
+if ! command -v bsdtar &> /dev/null; then
+    echo "ERROR: bsdtar is not installed"
+    echo "Install your distribution's libarchive tools"
+    exit 1
+fi
+
 echo "  ✓ dotnet $(dotnet --version)"
 echo "  ✓ fpm $(fpm --version | head -1)"
+echo "  ✓ $(rpmbuild --version)"
+echo "  ✓ $(bsdtar --version | head -1)"
+
+# Clean previous builds only after all prerequisites are available.
+rm -rf "$BUILD_DIR" "$OUTPUT_DIR"
+mkdir -p "$BUILD_DIR" "$PUBLISH_DIR" "$OUTPUT_DIR"
 
 # Build the application
 echo ""
