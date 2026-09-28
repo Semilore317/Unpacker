@@ -1,8 +1,8 @@
 # Unpacker
 
-[![CI](https://github.com/Semilore317/Unpacker/actions/workflows/ci.yml/badge.svg)](https://github.com/Semilore317/Unpacker/actions/workflows/ci.yml)
-
 Unpacker is a Linux desktop app for installing software shipped as tarballs. It can set an app up in `~/.local` without admin access, or build a native package with FPM.
+
+<img width="1433" height="747" alt="image" src="https://github.com/user-attachments/assets/f7470f4e-e16c-4b71-95ea-42b35dbc136b" />
 
 ## What it does
 
@@ -21,10 +21,4 @@ dotnet test
 dotnet run --project Unpacker/Unpacker.csproj
 ```
 
-For native packages, install [FPM](https://fpm.readthedocs.io/) and the package manager for your distribution. The root `build-release.sh` script publishes a `linux-x64` build and writes packages to `releases/`.
-
-Unpacker does not manage uninstalls yet. System installation needs a working graphical PolicyKit agent, which a plain WSL terminal usually does not provide.
-
-## Demo
-
-Screenshot coming soon from a current Linux desktop run.
+For native packages, install [FPM](https://fpm.readthedocs.io/) and the package manager for your distribution. The root `build-release.sh` script publishes a `linux-x64` build and writes packages to `releases/`.]
